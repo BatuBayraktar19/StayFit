@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "StayFit",
+    "slug": "stayfit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "gymapp",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "StayFit braucht Zugriff auf deine Fotos für den Fortschritts-Tab.",
+          "cameraPermission": "StayFit braucht Kamera-Zugriff für Progress-Fotos."
+        }
+      ],
+      "expo-sharing"
+    ]
+  }
+}

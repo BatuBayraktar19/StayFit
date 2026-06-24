@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(Get-ChildItem C:\\\\Users\\\\543ba\\\\Desktop\\\\GymAppTemp -Name | ForEach-Object { Move-Item \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymAppTemp\\\\$_\" \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\\" -Force }; Remove-Item C:\\\\Users\\\\543ba\\\\Desktop\\\\GymAppTemp -Recurse -Force; Get-ChildItem C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp -Name)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\app\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\app\\\\\\(tabs\\)\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\app\\\\program\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\app\\\\workout\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\lib\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\components\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\constants\" -Force)",
+      "mcp__Claude_Preview__preview_start",
+      "PowerShell(Stop-Process -Id 22748 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\app\\\\calendar\")",
+      "PowerShell(npm show expo version)"
+    ]
+  }
+}
