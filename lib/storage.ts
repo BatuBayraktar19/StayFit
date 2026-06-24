@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Program, WorkoutSession, Exercise, WorkoutSet, BodyWeightEntry, ProgressPhoto } from './types';
+import { Program, WorkoutSession, Exercise, WorkoutSet, BodyWeightEntry, ProgressPhoto, FoodEntry, NutritionGoal } from './types';
 
 const KEYS = {
   programs: 'programs',
@@ -8,6 +8,8 @@ const KEYS = {
   sets: 'sets',
   bodyweight: 'bodyweight',
   photos: 'photos',
+  food: 'food',
+  nutritionGoal: 'nutritionGoal',
 };
 
 function uuid() {
@@ -126,6 +128,36 @@ export const db = {
     async delete(id: string): Promise<void> {
       const all = await get<ProgressPhoto>(KEYS.photos);
       await save(KEYS.photos, all.filter(e => e.id !== id));
+    },
+  },
+
+  food: {
+    async getByDate(date: string): Promise<FoodEntry[]> {
+      const all = await get<FoodEntry>(KEYS.food);
+      return all.filter(f => f.date === date);
+    },
+    async getAll(): Promise<FoodEntry[]> {
+      return get<FoodEntry>(KEYS.food);
+    },
+    async add(entry: Omit<FoodEntry, 'id'>): Promise<FoodEntry> {
+      const all = await get<FoodEntry>(KEYS.food);
+      const f: FoodEntry = { id: uuid(), ...entry };
+      await save(KEYS.food, [...all, f]);
+      return f;
+    },
+    async delete(id: string): Promise<void> {
+      const all = await get<FoodEntry>(KEYS.food);
+      await save(KEYS.food, all.filter(f => f.id !== id));
+    },
+  },
+
+  nutritionGoal: {
+    async get(): Promise<NutritionGoal> {
+      const raw = await AsyncStorage.getItem(KEYS.nutritionGoal);
+      return raw ? JSON.parse(raw) : { calories: 2000, protein: null };
+    },
+    async set(goal: NutritionGoal): Promise<void> {
+      await AsyncStorage.setItem(KEYS.nutritionGoal, JSON.stringify(goal));
     },
   },
 

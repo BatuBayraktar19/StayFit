@@ -1,8 +1,10 @@
 import { useCallback, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  SafeAreaView, TextInput, Alert, Modal, FlatList, ActivityIndicator,
+  TextInput, Alert, Modal, FlatList, ActivityIndicator,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
@@ -20,7 +22,7 @@ function SetRow({
   onUpdate: (id: string, data: Partial<WorkoutSet>) => void;
   onDelete: (id: string) => void;
 }) {
-  const isBilateral = set.reps_right !== null || set.reps_left !== null;
+  const isBilateral = set.is_bilateral;
 
   return (
     <View style={styles.setRow}>
@@ -212,9 +214,10 @@ export default function WorkoutScreen() {
     const set = await db.sets.create(exerciseId, {
       order_index: ex.sets.length,
       weight: null,
-      reps: bilateral ? null : null,
-      reps_right: bilateral ? null : null,
-      reps_left: bilateral ? null : null,
+      reps: null,
+      reps_right: null,
+      reps_left: null,
+      is_bilateral: bilateral,
       is_warmup: warmup,
       note: null,
     });
@@ -259,7 +262,8 @@ export default function WorkoutScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <View style={styles.topRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Text style={styles.backText}>‹ Zurück</Text>
@@ -284,6 +288,7 @@ export default function WorkoutScreen() {
           <Text style={styles.addExBtnText}>+ Übung hinzufügen</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal visible={showAddEx} transparent animationType="slide">
         <View style={styles.modalOverlay}>

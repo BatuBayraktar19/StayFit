@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  SafeAreaView, TextInput, ActivityIndicator, Modal, ScrollView,
+  TextInput, ActivityIndicator, Modal, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 
 type Translation = {

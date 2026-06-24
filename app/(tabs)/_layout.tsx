@@ -56,6 +56,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="nutrition"
+        options={{
+          title: 'Kalorien',
+          tabBarLabel: 'Kalorien',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🍽️" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           href: null,
