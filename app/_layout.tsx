@@ -6,7 +6,7 @@ import { ThemeProvider } from '../lib/theme';
 
 export default function RootLayout() {
   useEffect(() => {
-    scheduleDailyNotification(8, 30);
+    scheduleDailyNotification();
   }, []);
 
   return (

@@ -99,6 +99,10 @@ export const db = {
       const sets = await get<WorkoutSet>(KEYS.sets);
       await save(KEYS.sets, sets.filter(s => s.exercise_id !== id));
     },
+    async rename(id: string, name: string): Promise<void> {
+      const all = await get<Exercise>(KEYS.exercises);
+      await save(KEYS.exercises, all.map(e => e.id === id ? { ...e, name } : e));
+    },
   },
 
   bodyweight: {
@@ -148,6 +152,10 @@ export const db = {
       const f: FoodEntry = { id: uuid(), ...entry };
       await save(KEYS.food, [...all, f]);
       return f;
+    },
+    async update(id: string, data: Partial<Omit<FoodEntry, 'id'>>): Promise<void> {
+      const all = await get<FoodEntry>(KEYS.food);
+      await save(KEYS.food, all.map(f => f.id === id ? { ...f, ...data } : f));
     },
     async delete(id: string): Promise<void> {
       const all = await get<FoodEntry>(KEYS.food);

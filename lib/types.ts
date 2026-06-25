@@ -44,6 +44,7 @@ export type FoodEntry = {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  note: string | null;
 };
 
 export type NutritionGoal = {

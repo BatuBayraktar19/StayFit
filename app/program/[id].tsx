@@ -243,9 +243,20 @@ export default function ProgramScreen() {
               <Text style={styles.noTemplates}>Noch keine Templates. Speichere ein Workout als Template.</Text>
             ) : (
               templates.map(t => (
-                <TouchableOpacity key={t.id} style={styles.templateItem} onPress={() => createFromTemplate(t)}>
+                <TouchableOpacity
+                  key={t.id}
+                  style={styles.templateItem}
+                  onPress={() => createFromTemplate(t)}
+                  onLongPress={() => Alert.alert(t.name, '', [
+                    { text: 'Löschen', style: 'destructive', onPress: async () => {
+                      await db.templates.delete(t.id);
+                      setTemplates(prev => prev.filter(x => x.id !== t.id));
+                    }},
+                    { text: 'Abbrechen', style: 'cancel' },
+                  ])}
+                >
                   <Text style={styles.templateName}>{t.name}</Text>
-                  <Text style={styles.templateSub}>{t.exercises.length} Übungen</Text>
+                  <Text style={styles.templateSub}>{t.exercises.length} Übungen · Lang drücken zum Löschen</Text>
                 </TouchableOpacity>
               ))
             )}
