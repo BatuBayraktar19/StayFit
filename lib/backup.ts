@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 
-const BACKUP_KEYS = ['programs', 'sessions', 'exercises', 'sets', 'bodyweight', 'photos'];
+const BACKUP_KEYS = ['programs', 'sessions', 'exercises', 'sets', 'bodyweight', 'photos', 'food', 'nutritionGoal', 'templates'];
 
 export async function exportBackup(): Promise<void> {
   const data: Record<string, unknown> = { version: 1, exportedAt: new Date().toISOString() };

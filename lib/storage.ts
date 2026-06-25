@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Program, WorkoutSession, Exercise, WorkoutSet, BodyWeightEntry, ProgressPhoto, FoodEntry, NutritionGoal } from './types';
+import { Program, WorkoutSession, Exercise, WorkoutSet, BodyWeightEntry, ProgressPhoto, FoodEntry, NutritionGoal, WorkoutTemplate } from './types';
 
 const KEYS = {
   programs: 'programs',
@@ -67,6 +67,10 @@ export const db = {
       await save(KEYS.sessions, [...all, s]);
       return s;
     },
+    async rename(id: string, name: string): Promise<void> {
+      const all = await get<WorkoutSession>(KEYS.sessions);
+      await save(KEYS.sessions, all.map(s => s.id === id ? { ...s, name } : s));
+    },
     async delete(id: string): Promise<void> {
       const all = await get<WorkoutSession>(KEYS.sessions);
       await save(KEYS.sessions, all.filter(s => s.id !== id));
@@ -119,9 +123,9 @@ export const db = {
       const all = await get<ProgressPhoto>(KEYS.photos);
       return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     },
-    async add(uri: string, date: string, note?: string): Promise<ProgressPhoto> {
+    async add(uri: string, date: string, type: 'photo' | 'video' = 'photo', note?: string): Promise<ProgressPhoto> {
       const all = await get<ProgressPhoto>(KEYS.photos);
-      const entry: ProgressPhoto = { id: uuid(), date, uri, note: note ?? null };
+      const entry: ProgressPhoto = { id: uuid(), date, uri, type, note: note ?? null };
       await save(KEYS.photos, [...all, entry]);
       return entry;
     },
@@ -158,6 +162,23 @@ export const db = {
     },
     async set(goal: NutritionGoal): Promise<void> {
       await AsyncStorage.setItem(KEYS.nutritionGoal, JSON.stringify(goal));
+    },
+  },
+
+  templates: {
+    async getAll(): Promise<WorkoutTemplate[]> {
+      const all = await get<WorkoutTemplate>('templates');
+      return all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    },
+    async create(name: string, exercises: { name: string; order_index: number }[]): Promise<WorkoutTemplate> {
+      const all = await get<WorkoutTemplate>('templates');
+      const t: WorkoutTemplate = { id: uuid(), name, exercises, created_at: new Date().toISOString() };
+      await save('templates', [...all, t]);
+      return t;
+    },
+    async delete(id: string): Promise<void> {
+      const all = await get<WorkoutTemplate>('templates');
+      await save('templates', all.filter(t => t.id !== id));
     },
   },
 

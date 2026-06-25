@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Alert, Modal, FlatList, ActivityIndicator,
@@ -7,7 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/colors';
+import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
 import { Exercise, WorkoutSet, WorkoutSession } from '../../lib/types';
 
@@ -17,10 +17,14 @@ function SetRow({
   set,
   onUpdate,
   onDelete,
+  styles,
+  Colors,
 }: {
   set: WorkoutSet;
   onUpdate: (id: string, data: Partial<WorkoutSet>) => void;
   onDelete: (id: string) => void;
+  styles: ReturnType<typeof createStyles>;
+  Colors: ColorScheme;
 }) {
   const isBilateral = set.is_bilateral;
 
@@ -92,12 +96,16 @@ function ExerciseBlock({
   onUpdateSet,
   onDeleteSet,
   onDelete,
+  styles,
+  Colors,
 }: {
   ex: ExerciseWithSets;
   onAddSet: (exerciseId: string, warmup: boolean, bilateral: boolean) => void;
   onUpdateSet: (id: string, data: Partial<WorkoutSet>) => void;
   onDeleteSet: (id: string) => void;
   onDelete: (id: string) => void;
+  styles: ReturnType<typeof createStyles>;
+  Colors: ColorScheme;
 }) {
   const [showOptions, setShowOptions] = useState(false);
 
@@ -128,7 +136,7 @@ function ExerciseBlock({
       )}
 
       {ex.sets.map(set => (
-        <SetRow key={set.id} set={set} onUpdate={onUpdateSet} onDelete={onDeleteSet} />
+        <SetRow key={set.id} set={set} onUpdate={onUpdateSet} onDelete={onDeleteSet} styles={styles} Colors={Colors} />
       ))}
 
       {ex.sets.length === 0 && (
@@ -141,6 +149,8 @@ function ExerciseBlock({
 }
 
 export default function WorkoutScreen() {
+  const Colors = useColors();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<WorkoutSession | null>(null);
@@ -242,6 +252,23 @@ export default function WorkoutScreen() {
     })));
   }
 
+  async function saveAsTemplate() {
+    if (!session) return;
+    Alert.alert('Als Template speichern', `"${session.name}" als Template speichern?`, [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Speichern',
+        onPress: async () => {
+          await db.templates.create(
+            session.name,
+            exercises.map((ex, i) => ({ name: ex.name, order_index: i }))
+          );
+          Alert.alert('Gespeichert ✓', 'Template steht beim nächsten Workout zur Verfügung.');
+        },
+      },
+    ]);
+  }
+
   async function deleteExercise(exerciseId: string) {
     Alert.alert('Übung löschen?', '', [
       { text: 'Abbrechen', style: 'cancel' },
@@ -281,17 +308,26 @@ export default function WorkoutScreen() {
             onUpdateSet={updateSet}
             onDeleteSet={deleteSet}
             onDelete={deleteExercise}
+            styles={styles}
+            Colors={Colors}
           />
         ))}
 
         <TouchableOpacity style={styles.addExBtn} onPress={() => setShowAddEx(true)}>
           <Text style={styles.addExBtnText}>+ Übung hinzufügen</Text>
         </TouchableOpacity>
+
+        {exercises.length > 0 && (
+          <TouchableOpacity style={styles.templateBtn} onPress={saveAsTemplate}>
+            <Text style={styles.templateBtnText}>📋 Als Template speichern</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
 
       <Modal visible={showAddEx} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Übung hinzufügen</Text>
             <View style={styles.searchRow}>
@@ -332,13 +368,15 @@ export default function WorkoutScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(Colors: ColorScheme) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   scroll: { padding: 16, paddingBottom: 60 },
   topRow: { flexDirection: 'row', marginBottom: 8 },
@@ -381,6 +419,11 @@ const styles = StyleSheet.create({
     padding: 10, alignItems: 'center',
   },
   addFirstSetText: { color: Colors.textMuted, fontSize: 13 },
+  templateBtn: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
+    padding: 14, alignItems: 'center', marginTop: 8,
+  },
+  templateBtnText: { color: Colors.textMuted, fontSize: 14 },
   addExBtn: {
     borderWidth: 1, borderColor: Colors.accent, borderRadius: 12, borderStyle: 'dashed',
     padding: 14, alignItems: 'center', marginTop: 8,
@@ -400,4 +443,5 @@ const styles = StyleSheet.create({
   suggestions: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, marginBottom: 12, overflow: 'hidden' },
   suggestionItem: { paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
   suggestionText: { color: Colors.text, fontSize: 14 },
-});
+  });
+}

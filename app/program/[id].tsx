@@ -1,14 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, Modal, TextInput,
+  Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/colors';
+import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
-import { Program, WorkoutSession } from '../../lib/types';
+import { Program, WorkoutSession, WorkoutTemplate } from '../../lib/types';
 
 const DAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -33,12 +33,22 @@ function formatDate(dateStr: string) {
 }
 
 export default function ProgramScreen() {
+  const Colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [program, setProgram] = useState<Program | null>(null);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
-  const [showModal, setShowModal] = useState(false);
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [showPickModal, setShowPickModal] = useState(false); // scratch vs template
+  const [showTemplateList, setShowTemplateList] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renamingSession, setRenamingSession] = useState<WorkoutSession | null>(null);
+
   const [sessionName, setSessionName] = useState('');
+  const [renameInput, setRenameInput] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -47,6 +57,7 @@ export default function ProgramScreen() {
         if (p) setProgram(p);
       });
       db.sessions.getByProgram(id!).then(setSessions);
+      db.templates.getAll().then(setTemplates);
     }, [id])
   );
 
@@ -56,8 +67,27 @@ export default function ProgramScreen() {
     const today = new Date().toISOString().split('T')[0];
     const session = await db.sessions.create(id, name, today);
     setSessionName('');
-    setShowModal(false);
+    setShowNewModal(false);
     router.push(`/workout/${session.id}`);
+  }
+
+  async function createFromTemplate(template: WorkoutTemplate) {
+    if (!id) return;
+    const today = new Date().toISOString().split('T')[0];
+    const session = await db.sessions.create(id, template.name, today);
+    for (const ex of template.exercises) {
+      await db.exercises.create(session.id, ex.name, ex.order_index);
+    }
+    setShowTemplateList(false);
+    router.push(`/workout/${session.id}`);
+  }
+
+  async function renameSession() {
+    if (!renamingSession || !renameInput.trim()) return;
+    await db.sessions.rename(renamingSession.id, renameInput.trim());
+    setSessions(prev => prev.map(s => s.id === renamingSession.id ? { ...s, name: renameInput.trim() } : s));
+    setShowRenameModal(false);
+    setRenamingSession(null);
   }
 
   async function deleteSession(sessionId: string, name: string) {
@@ -75,8 +105,7 @@ export default function ProgramScreen() {
 
   const calDays = getMiniCalendar(sessions);
   const totalSessions = sessions.length;
-  const thisWeekDates = calDays.map(d => d.date);
-  const thisWeek = sessions.filter(s => thisWeekDates.includes(s.date)).length;
+  const thisWeek = sessions.filter(s => calDays.map(d => d.date).includes(s.date)).length;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -94,7 +123,7 @@ export default function ProgramScreen() {
                 <TouchableOpacity style={styles.calBtn} onPress={() => router.push(`/calendar/${id}`)}>
                   <Text style={styles.calBtnText}>📅 Kalender</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)}>
+                <TouchableOpacity style={styles.addBtn} onPress={() => setShowPickModal(true)}>
                   <Text style={styles.addBtnText}>+ Workout</Text>
                 </TouchableOpacity>
               </View>
@@ -115,19 +144,10 @@ export default function ProgramScreen() {
 
             <View style={styles.calRow}>
               {calDays.map(d => (
-                <View
-                  key={d.date}
-                  style={[
-                    styles.calDay,
-                    d.hasSession && styles.calDayActive,
-                    d.isToday && !d.hasSession && styles.calDayToday,
-                  ]}
-                >
-                  <Text style={[
-                    styles.calDayLabel,
-                    d.hasSession && styles.calDayLabelActive,
-                    d.isToday && !d.hasSession && styles.calDayLabelToday,
-                  ]}>{d.label}</Text>
+                <View key={d.date} style={[styles.calDay, d.hasSession && styles.calDayActive, d.isToday && !d.hasSession && styles.calDayToday]}>
+                  <Text style={[styles.calDayLabel, d.hasSession && styles.calDayLabelActive, d.isToday && !d.hasSession && styles.calDayLabelToday]}>
+                    {d.label}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -145,7 +165,13 @@ export default function ProgramScreen() {
           <TouchableOpacity
             style={styles.sessionCard}
             onPress={() => router.push(`/workout/${item.id}`)}
-            onLongPress={() => deleteSession(item.id, item.name)}
+            onLongPress={() => {
+              Alert.alert(item.name, '', [
+                { text: 'Umbenennen', onPress: () => { setRenamingSession(item); setRenameInput(item.name); setShowRenameModal(true); } },
+                { text: 'Löschen', style: 'destructive', onPress: () => deleteSession(item.id, item.name) },
+                { text: 'Abbrechen', style: 'cancel' },
+              ]);
+            }}
           >
             <View style={styles.sessionLeft}>
               <Text style={styles.sessionName}>{item.name}</Text>
@@ -156,10 +182,34 @@ export default function ProgramScreen() {
         )}
       />
 
-      <Modal visible={showModal} transparent animationType="slide">
+      {/* Pick: Neu oder Template */}
+      <Modal visible={showPickModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Neues Workout</Text>
+            <TouchableOpacity style={styles.pickBtn} onPress={() => { setShowPickModal(false); setShowNewModal(true); }}>
+              <Text style={styles.pickBtnTitle}>✏️ Leeres Workout</Text>
+              <Text style={styles.pickBtnSub}>Übungen selbst wählen</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pickBtn} onPress={() => { setShowPickModal(false); setShowTemplateList(true); }}>
+              <Text style={styles.pickBtnTitle}>📋 Aus Template</Text>
+              <Text style={styles.pickBtnSub}>{templates.length} gespeicherte Templates</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel, { marginTop: 4 }]} onPress={() => setShowPickModal(false)}>
+              <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+            </TouchableOpacity>
+          </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Leeres Workout */}
+      <Modal visible={showNewModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Workout benennen</Text>
             <TextInput
               style={styles.input}
               placeholder="z.B. Upper, Lower, Push..."
@@ -171,10 +221,7 @@ export default function ProgramScreen() {
               onSubmitEditing={createSession}
             />
             <View style={styles.modalBtns}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-                onPress={() => { setShowModal(false); setSessionName(''); }}
-              >
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => { setShowNewModal(false); setSessionName(''); }}>
                 <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={createSession}>
@@ -182,13 +229,67 @@ export default function ProgramScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Template Liste */}
+      <Modal visible={showTemplateList} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Template wählen</Text>
+            {templates.length === 0 ? (
+              <Text style={styles.noTemplates}>Noch keine Templates. Speichere ein Workout als Template.</Text>
+            ) : (
+              templates.map(t => (
+                <TouchableOpacity key={t.id} style={styles.templateItem} onPress={() => createFromTemplate(t)}>
+                  <Text style={styles.templateName}>{t.name}</Text>
+                  <Text style={styles.templateSub}>{t.exercises.length} Übungen</Text>
+                </TouchableOpacity>
+              ))
+            )}
+            <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel, { marginTop: 8 }]} onPress={() => setShowTemplateList(false)}>
+              <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+            </TouchableOpacity>
+          </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Umbenennen Modal */}
+      <Modal visible={showRenameModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Session umbenennen</Text>
+            <TextInput
+              style={styles.input}
+              value={renameInput}
+              onChangeText={setRenameInput}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={renameSession}
+              placeholderTextColor={Colors.textMuted}
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowRenameModal(false)}>
+                <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={renameSession}>
+                <Text style={styles.modalBtnCreateText}>Speichern</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(Colors: ColorScheme) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   list: { padding: 16, paddingBottom: 32 },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
@@ -201,27 +302,18 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   programTitle: { fontSize: 26, fontWeight: '700', color: Colors.text, marginBottom: 16 },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  statBox: {
-    flex: 1, backgroundColor: Colors.surface, borderRadius: 10,
-    padding: 12, alignItems: 'center',
-  },
+  statBox: { flex: 1, backgroundColor: Colors.surface, borderRadius: 10, padding: 12, alignItems: 'center' },
   statNum: { fontSize: 24, fontWeight: '600', color: Colors.text },
   statLbl: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
   calRow: { flexDirection: 'row', gap: 5, marginBottom: 20 },
-  calDay: {
-    flex: 1, aspectRatio: 1, borderRadius: 8,
-    backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center',
-  },
+  calDay: { flex: 1, aspectRatio: 1, borderRadius: 8, backgroundColor: Colors.surface, alignItems: 'center', justifyContent: 'center' },
   calDayActive: { backgroundColor: Colors.accent },
   calDayToday: { borderWidth: 1, borderColor: Colors.accent },
   calDayLabel: { fontSize: 10, color: Colors.textMuted, fontWeight: '500' },
   calDayLabelActive: { color: '#fff' },
   calDayLabelToday: { color: Colors.accent },
   sectionLabel: { fontSize: 11, color: Colors.textMuted, letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' },
-  sessionCard: {
-    backgroundColor: Colors.surface, borderRadius: 12, padding: 14,
-    marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
+  sessionCard: { backgroundColor: Colors.surface, borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sessionLeft: { flex: 1 },
   sessionName: { fontSize: 16, fontWeight: '500', color: Colors.text },
   sessionDate: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
@@ -229,7 +321,14 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', marginTop: 40 },
   emptyText: { fontSize: 16, color: Colors.textSecondary, marginBottom: 6 },
   emptyHint: { fontSize: 13, color: Colors.textMuted },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  pickBtn: { backgroundColor: Colors.surfaceAlt, borderRadius: 12, padding: 14, marginBottom: 10 },
+  pickBtnTitle: { fontSize: 16, fontWeight: '600', color: Colors.text, marginBottom: 3 },
+  pickBtnSub: { fontSize: 12, color: Colors.textMuted },
+  templateItem: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, marginBottom: 8 },
+  templateName: { fontSize: 15, fontWeight: '600', color: Colors.text, marginBottom: 2 },
+  templateSub: { fontSize: 12, color: Colors.textMuted },
+  noTemplates: { fontSize: 14, color: Colors.textMuted, textAlign: 'center', marginVertical: 16, lineHeight: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
   modalBox: { backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
   modalTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 16 },
   input: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, color: Colors.text, fontSize: 16, marginBottom: 16 },
@@ -239,4 +338,5 @@ const styles = StyleSheet.create({
   modalBtnCancelText: { color: Colors.textSecondary, fontWeight: '500' },
   modalBtnCreate: { backgroundColor: Colors.accent },
   modalBtnCreateText: { color: '#fff', fontWeight: '600' },
-});
+  });
+}
