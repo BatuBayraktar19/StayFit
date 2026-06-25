@@ -1,9 +1,16 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { scheduleDailyNotification } from '../lib/notifications';
+import { ThemeProvider } from '../lib/theme';
 
 export default function RootLayout() {
+  useEffect(() => {
+    scheduleDailyNotification();
+  }, []);
+
   return (
-    <>
+    <ThemeProvider>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -19,6 +26,6 @@ export default function RootLayout() {
         <Stack.Screen name="workout/new" options={{ headerShown: false }} />
         <Stack.Screen name="calendar/[programId]" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </ThemeProvider>
   );
 }

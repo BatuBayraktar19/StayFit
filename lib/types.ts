@@ -32,6 +32,7 @@ export type ProgressPhoto = {
   id: string;
   date: string;
   uri: string;
+  type: 'photo' | 'video';
   note: string | null;
 };
 
@@ -43,11 +44,19 @@ export type FoodEntry = {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  note: string | null;
 };
 
 export type NutritionGoal = {
   calories: number;
   protein: number | null;
+};
+
+export type WorkoutTemplate = {
+  id: string;
+  name: string;
+  exercises: { name: string; order_index: number }[];
+  created_at: string;
 };
 
 export type WorkoutSet = {

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Alert, Modal, FlatList, ActivityIndicator,
@@ -7,7 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/colors';
+import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
 import { Exercise, WorkoutSet, WorkoutSession } from '../../lib/types';
 
@@ -17,11 +17,21 @@ function SetRow({
   set,
   onUpdate,
   onDelete,
+  styles,
+  Colors,
 }: {
   set: WorkoutSet;
   onUpdate: (id: string, data: Partial<WorkoutSet>) => void;
   onDelete: (id: string) => void;
+  styles: ReturnType<typeof createStyles>;
+  Colors: ColorScheme;
 }) {
+  const [localWeight, setLocalWeight] = useState(set.weight !== null ? String(set.weight) : '');
+  const [localReps, setLocalReps] = useState(set.reps !== null ? String(set.reps) : '');
+  const [localRepsRight, setLocalRepsRight] = useState(set.reps_right !== null ? String(set.reps_right) : '');
+  const [localRepsLeft, setLocalRepsLeft] = useState(set.reps_left !== null ? String(set.reps_left) : '');
+  const [localNote, setLocalNote] = useState(set.note ?? '');
+
   const isBilateral = set.is_bilateral;
 
   return (
@@ -37,8 +47,9 @@ function SetRow({
           placeholder="kg"
           placeholderTextColor={Colors.textMuted}
           keyboardType="decimal-pad"
-          value={set.weight !== null ? String(set.weight) : ''}
-          onChangeText={v => onUpdate(set.id, { weight: v ? parseFloat(v) : null })}
+          value={localWeight}
+          onChangeText={setLocalWeight}
+          onBlur={() => onUpdate(set.id, { weight: localWeight ? parseFloat(localWeight.replace(',', '.')) : null })}
         />
         <Text style={styles.setX}>×</Text>
         {isBilateral ? (
@@ -48,8 +59,9 @@ function SetRow({
               placeholder="R"
               placeholderTextColor={Colors.textMuted}
               keyboardType="decimal-pad"
-              value={set.reps_right !== null ? String(set.reps_right) : ''}
-              onChangeText={v => onUpdate(set.id, { reps_right: v ? parseFloat(v) : null })}
+              value={localRepsRight}
+              onChangeText={setLocalRepsRight}
+              onBlur={() => onUpdate(set.id, { reps_right: localRepsRight ? parseFloat(localRepsRight.replace(',', '.')) : null })}
             />
             <Text style={styles.setX}>/</Text>
             <TextInput
@@ -57,8 +69,9 @@ function SetRow({
               placeholder="L"
               placeholderTextColor={Colors.textMuted}
               keyboardType="decimal-pad"
-              value={set.reps_left !== null ? String(set.reps_left) : ''}
-              onChangeText={v => onUpdate(set.id, { reps_left: v ? parseFloat(v) : null })}
+              value={localRepsLeft}
+              onChangeText={setLocalRepsLeft}
+              onBlur={() => onUpdate(set.id, { reps_left: localRepsLeft ? parseFloat(localRepsLeft.replace(',', '.')) : null })}
             />
           </>
         ) : (
@@ -67,8 +80,9 @@ function SetRow({
             placeholder="reps"
             placeholderTextColor={Colors.textMuted}
             keyboardType="decimal-pad"
-            value={set.reps !== null ? String(set.reps) : ''}
-            onChangeText={v => onUpdate(set.id, { reps: v ? parseFloat(v) : null })}
+            value={localReps}
+            onChangeText={setLocalReps}
+            onBlur={() => onUpdate(set.id, { reps: localReps ? parseFloat(localReps.replace(',', '.')) : null })}
           />
         )}
         <TouchableOpacity onPress={() => onDelete(set.id)} style={styles.deleteSetBtn}>
@@ -77,10 +91,11 @@ function SetRow({
       </View>
       <TextInput
         style={styles.noteInput}
-        placeholder="// Notiz (optional)"
+        placeholder="Notiz..."
         placeholderTextColor={Colors.textMuted}
-        value={set.note ?? ''}
-        onChangeText={v => onUpdate(set.id, { note: v || null })}
+        value={localNote}
+        onChangeText={setLocalNote}
+        onBlur={() => onUpdate(set.id, { note: localNote || null })}
       />
     </View>
   );
@@ -92,12 +107,17 @@ function ExerciseBlock({
   onUpdateSet,
   onDeleteSet,
   onDelete,
+  styles,
+  Colors,
 }: {
   ex: ExerciseWithSets;
   onAddSet: (exerciseId: string, warmup: boolean, bilateral: boolean) => void;
   onUpdateSet: (id: string, data: Partial<WorkoutSet>) => void;
   onDeleteSet: (id: string) => void;
   onDelete: (id: string) => void;
+  onRenameRequest: (id: string) => void;
+  styles: ReturnType<typeof createStyles>;
+  Colors: ColorScheme;
 }) {
   const [showOptions, setShowOptions] = useState(false);
 
@@ -121,6 +141,9 @@ function ExerciseBlock({
           <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, false, true); setShowOptions(false); }}>
             <Text style={styles.exOptionText}>+ L/R Satz</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onRenameRequest(ex.id); setShowOptions(false); }}>
+            <Text style={styles.exOptionText}>✏️ Umbenennen</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.exOptionBtn, { borderColor: Colors.danger }]} onPress={() => onDelete(ex.id)}>
             <Text style={[styles.exOptionText, { color: Colors.danger }]}>Übung löschen</Text>
           </TouchableOpacity>
@@ -128,7 +151,7 @@ function ExerciseBlock({
       )}
 
       {ex.sets.map(set => (
-        <SetRow key={set.id} set={set} onUpdate={onUpdateSet} onDelete={onDeleteSet} />
+        <SetRow key={set.id} set={set} onUpdate={onUpdateSet} onDelete={onDeleteSet} styles={styles} Colors={Colors} />
       ))}
 
       {ex.sets.length === 0 && (
@@ -141,6 +164,8 @@ function ExerciseBlock({
 }
 
 export default function WorkoutScreen() {
+  const Colors = useColors();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<WorkoutSession | null>(null);
@@ -149,6 +174,9 @@ export default function WorkoutScreen() {
   const [newExName, setNewExName] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renamingExId, setRenamingExId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -226,12 +254,12 @@ export default function WorkoutScreen() {
     ));
   }
 
-  async function updateSet(setId: string, data: Partial<WorkoutSet>) {
-    await db.sets.update(setId, data);
+  function updateSet(setId: string, data: Partial<WorkoutSet>) {
     setExercises(prev => prev.map(e => ({
       ...e,
       sets: e.sets.map(s => s.id === setId ? { ...s, ...data } : s),
     })));
+    db.sets.update(setId, data);
   }
 
   async function deleteSet(setId: string) {
@@ -240,6 +268,39 @@ export default function WorkoutScreen() {
       ...e,
       sets: e.sets.filter(s => s.id !== setId),
     })));
+  }
+
+  async function saveAsTemplate() {
+    if (!session) return;
+    Alert.alert('Als Template speichern', `"${session.name}" als Template speichern?`, [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Speichern',
+        onPress: async () => {
+          await db.templates.create(
+            session.name,
+            exercises.map((ex, i) => ({ name: ex.name, order_index: i }))
+          );
+          Alert.alert('Gespeichert ✓', 'Template steht beim nächsten Workout zur Verfügung.');
+        },
+      },
+    ]);
+  }
+
+  function handleRenameRequest(id: string) {
+    const ex = exercises.find(e => e.id === id);
+    if (!ex) return;
+    setRenamingExId(id);
+    setRenameInput(ex.name);
+    setShowRenameModal(true);
+  }
+
+  async function renameExercise() {
+    if (!renamingExId || !renameInput.trim()) return;
+    await db.exercises.rename(renamingExId, renameInput.trim());
+    setExercises(prev => prev.map(e => e.id === renamingExId ? { ...e, name: renameInput.trim() } : e));
+    setShowRenameModal(false);
+    setRenamingExId(null);
   }
 
   async function deleteExercise(exerciseId: string) {
@@ -281,17 +342,54 @@ export default function WorkoutScreen() {
             onUpdateSet={updateSet}
             onDeleteSet={deleteSet}
             onDelete={deleteExercise}
+            onRenameRequest={handleRenameRequest}
+            styles={styles}
+            Colors={Colors}
           />
         ))}
 
         <TouchableOpacity style={styles.addExBtn} onPress={() => setShowAddEx(true)}>
           <Text style={styles.addExBtnText}>+ Übung hinzufügen</Text>
         </TouchableOpacity>
+
+        {exercises.length > 0 && (
+          <TouchableOpacity style={styles.templateBtn} onPress={saveAsTemplate}>
+            <Text style={styles.templateBtnText}>📋 Als Template speichern</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
 
+      <Modal visible={showRenameModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>Übung umbenennen</Text>
+              <TextInput
+                style={styles.input}
+                value={renameInput}
+                onChangeText={setRenameInput}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={renameExercise}
+                placeholderTextColor={Colors.textMuted}
+              />
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowRenameModal(false)}>
+                  <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={renameExercise}>
+                  <Text style={styles.modalBtnCreateText}>Speichern</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
       <Modal visible={showAddEx} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Übung hinzufügen</Text>
             <View style={styles.searchRow}>
@@ -332,13 +430,15 @@ export default function WorkoutScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(Colors: ColorScheme) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   scroll: { padding: 16, paddingBottom: 60 },
   topRow: { flexDirection: 'row', marginBottom: 8 },
@@ -373,14 +473,20 @@ const styles = StyleSheet.create({
   deleteSetBtn: { marginLeft: 4, padding: 6 },
   deleteSetText: { color: Colors.textMuted, fontSize: 14 },
   noteInput: {
-    marginTop: 4, color: Colors.textMuted, fontSize: 12,
-    paddingVertical: 4, paddingHorizontal: 2,
+    marginTop: 6, color: Colors.textSecondary, fontSize: 13,
+    backgroundColor: Colors.surfaceAlt, borderRadius: 6,
+    paddingVertical: 6, paddingHorizontal: 10,
   },
   addFirstSet: {
     borderWidth: 0.5, borderColor: Colors.border, borderRadius: 8, borderStyle: 'dashed',
     padding: 10, alignItems: 'center',
   },
   addFirstSetText: { color: Colors.textMuted, fontSize: 13 },
+  templateBtn: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
+    padding: 14, alignItems: 'center', marginTop: 8,
+  },
+  templateBtnText: { color: Colors.textMuted, fontSize: 14 },
   addExBtn: {
     borderWidth: 1, borderColor: Colors.accent, borderRadius: 12, borderStyle: 'dashed',
     padding: 14, alignItems: 'center', marginTop: 8,
@@ -400,4 +506,5 @@ const styles = StyleSheet.create({
   suggestions: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, marginBottom: 12, overflow: 'hidden' },
   suggestionItem: { paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.border },
   suggestionText: { color: Colors.text, fontSize: 14 },
-});
+  });
+}
