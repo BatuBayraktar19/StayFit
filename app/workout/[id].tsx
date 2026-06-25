@@ -26,6 +26,12 @@ function SetRow({
   styles: ReturnType<typeof createStyles>;
   Colors: ColorScheme;
 }) {
+  const [localWeight, setLocalWeight] = useState(set.weight !== null ? String(set.weight) : '');
+  const [localReps, setLocalReps] = useState(set.reps !== null ? String(set.reps) : '');
+  const [localRepsRight, setLocalRepsRight] = useState(set.reps_right !== null ? String(set.reps_right) : '');
+  const [localRepsLeft, setLocalRepsLeft] = useState(set.reps_left !== null ? String(set.reps_left) : '');
+  const [localNote, setLocalNote] = useState(set.note ?? '');
+
   const isBilateral = set.is_bilateral;
 
   return (
@@ -41,8 +47,9 @@ function SetRow({
           placeholder="kg"
           placeholderTextColor={Colors.textMuted}
           keyboardType="decimal-pad"
-          value={set.weight !== null ? String(set.weight) : ''}
-          onChangeText={v => onUpdate(set.id, { weight: v ? parseFloat(v) : null })}
+          value={localWeight}
+          onChangeText={setLocalWeight}
+          onBlur={() => onUpdate(set.id, { weight: localWeight ? parseFloat(localWeight.replace(',', '.')) : null })}
         />
         <Text style={styles.setX}>×</Text>
         {isBilateral ? (
@@ -52,8 +59,9 @@ function SetRow({
               placeholder="R"
               placeholderTextColor={Colors.textMuted}
               keyboardType="decimal-pad"
-              value={set.reps_right !== null ? String(set.reps_right) : ''}
-              onChangeText={v => onUpdate(set.id, { reps_right: v ? parseFloat(v) : null })}
+              value={localRepsRight}
+              onChangeText={setLocalRepsRight}
+              onBlur={() => onUpdate(set.id, { reps_right: localRepsRight ? parseFloat(localRepsRight.replace(',', '.')) : null })}
             />
             <Text style={styles.setX}>/</Text>
             <TextInput
@@ -61,8 +69,9 @@ function SetRow({
               placeholder="L"
               placeholderTextColor={Colors.textMuted}
               keyboardType="decimal-pad"
-              value={set.reps_left !== null ? String(set.reps_left) : ''}
-              onChangeText={v => onUpdate(set.id, { reps_left: v ? parseFloat(v) : null })}
+              value={localRepsLeft}
+              onChangeText={setLocalRepsLeft}
+              onBlur={() => onUpdate(set.id, { reps_left: localRepsLeft ? parseFloat(localRepsLeft.replace(',', '.')) : null })}
             />
           </>
         ) : (
@@ -71,8 +80,9 @@ function SetRow({
             placeholder="reps"
             placeholderTextColor={Colors.textMuted}
             keyboardType="decimal-pad"
-            value={set.reps !== null ? String(set.reps) : ''}
-            onChangeText={v => onUpdate(set.id, { reps: v ? parseFloat(v) : null })}
+            value={localReps}
+            onChangeText={setLocalReps}
+            onBlur={() => onUpdate(set.id, { reps: localReps ? parseFloat(localReps.replace(',', '.')) : null })}
           />
         )}
         <TouchableOpacity onPress={() => onDelete(set.id)} style={styles.deleteSetBtn}>
@@ -81,10 +91,11 @@ function SetRow({
       </View>
       <TextInput
         style={styles.noteInput}
-        placeholder="// Notiz (optional)"
+        placeholder="Notiz..."
         placeholderTextColor={Colors.textMuted}
-        value={set.note ?? ''}
-        onChangeText={v => onUpdate(set.id, { note: v || null })}
+        value={localNote}
+        onChangeText={setLocalNote}
+        onBlur={() => onUpdate(set.id, { note: localNote || null })}
       />
     </View>
   );
@@ -104,6 +115,7 @@ function ExerciseBlock({
   onUpdateSet: (id: string, data: Partial<WorkoutSet>) => void;
   onDeleteSet: (id: string) => void;
   onDelete: (id: string) => void;
+  onRenameRequest: (id: string) => void;
   styles: ReturnType<typeof createStyles>;
   Colors: ColorScheme;
 }) {
@@ -128,6 +140,9 @@ function ExerciseBlock({
           </TouchableOpacity>
           <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, false, true); setShowOptions(false); }}>
             <Text style={styles.exOptionText}>+ L/R Satz</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onRenameRequest(ex.id); setShowOptions(false); }}>
+            <Text style={styles.exOptionText}>✏️ Umbenennen</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.exOptionBtn, { borderColor: Colors.danger }]} onPress={() => onDelete(ex.id)}>
             <Text style={[styles.exOptionText, { color: Colors.danger }]}>Übung löschen</Text>
@@ -159,6 +174,9 @@ export default function WorkoutScreen() {
   const [newExName, setNewExName] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renamingExId, setRenamingExId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -236,12 +254,12 @@ export default function WorkoutScreen() {
     ));
   }
 
-  async function updateSet(setId: string, data: Partial<WorkoutSet>) {
-    await db.sets.update(setId, data);
+  function updateSet(setId: string, data: Partial<WorkoutSet>) {
     setExercises(prev => prev.map(e => ({
       ...e,
       sets: e.sets.map(s => s.id === setId ? { ...s, ...data } : s),
     })));
+    db.sets.update(setId, data);
   }
 
   async function deleteSet(setId: string) {
@@ -267,6 +285,22 @@ export default function WorkoutScreen() {
         },
       },
     ]);
+  }
+
+  function handleRenameRequest(id: string) {
+    const ex = exercises.find(e => e.id === id);
+    if (!ex) return;
+    setRenamingExId(id);
+    setRenameInput(ex.name);
+    setShowRenameModal(true);
+  }
+
+  async function renameExercise() {
+    if (!renamingExId || !renameInput.trim()) return;
+    await db.exercises.rename(renamingExId, renameInput.trim());
+    setExercises(prev => prev.map(e => e.id === renamingExId ? { ...e, name: renameInput.trim() } : e));
+    setShowRenameModal(false);
+    setRenamingExId(null);
   }
 
   async function deleteExercise(exerciseId: string) {
@@ -308,6 +342,7 @@ export default function WorkoutScreen() {
             onUpdateSet={updateSet}
             onDeleteSet={deleteSet}
             onDelete={deleteExercise}
+            onRenameRequest={handleRenameRequest}
             styles={styles}
             Colors={Colors}
           />
@@ -324,6 +359,33 @@ export default function WorkoutScreen() {
         )}
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={showRenameModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>Übung umbenennen</Text>
+              <TextInput
+                style={styles.input}
+                value={renameInput}
+                onChangeText={setRenameInput}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={renameExercise}
+                placeholderTextColor={Colors.textMuted}
+              />
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowRenameModal(false)}>
+                  <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={renameExercise}>
+                  <Text style={styles.modalBtnCreateText}>Speichern</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
       <Modal visible={showAddEx} transparent animationType="slide">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }}>
@@ -411,8 +473,9 @@ function createStyles(Colors: ColorScheme) {
   deleteSetBtn: { marginLeft: 4, padding: 6 },
   deleteSetText: { color: Colors.textMuted, fontSize: 14 },
   noteInput: {
-    marginTop: 4, color: Colors.textMuted, fontSize: 12,
-    paddingVertical: 4, paddingHorizontal: 2,
+    marginTop: 6, color: Colors.textSecondary, fontSize: 13,
+    backgroundColor: Colors.surfaceAlt, borderRadius: 6,
+    paddingVertical: 6, paddingHorizontal: 10,
   },
   addFirstSet: {
     borderWidth: 0.5, borderColor: Colors.border, borderRadius: 8, borderStyle: 'dashed',

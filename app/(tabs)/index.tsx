@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { useColors, useTheme, THEMES, ThemeKey, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
-import { Program } from '../../lib/types';
+import { Program, WorkoutTemplate } from '../../lib/types';
 import { exportBackup, importBackup } from '../../lib/backup';
 import { sendTestNotification } from '../../lib/notifications';
 
@@ -19,12 +19,15 @@ export default function HomeScreen() {
   const styles = useMemo(() => createStyles(Colors), [Colors]);
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
   const [newName, setNewName] = useState('');
 
   useFocusEffect(useCallback(() => {
     db.programs.getAll().then(setPrograms);
+    db.templates.getAll().then(setTemplates);
   }, []));
 
   async function createProgram() {
@@ -56,6 +59,9 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>StayFit</Text>
             <View style={styles.headerBtns}>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => setShowTemplatesModal(true)}>
+                <Text style={styles.iconBtnText}>📋</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.iconBtn} onPress={() => setShowBackupModal(true)}>
                 <Text style={styles.iconBtnText}>⚙️</Text>
               </TouchableOpacity>
@@ -113,6 +119,46 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Templates */}
+      <Modal visible={showTemplatesModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+          <View style={[styles.modalBox, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>📋 Templates</Text>
+            {templates.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 24 }}>
+                <Text style={{ color: Colors.textMuted, fontSize: 14, textAlign: 'center' }}>
+                  Noch keine Templates.{'\n'}Speichere ein Workout als Template um es hier zu sehen.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView bounces={false}>
+                {templates.map(t => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={styles.backupBtn}
+                    onLongPress={() => Alert.alert(t.name, '', [
+                      { text: 'Löschen', style: 'destructive', onPress: async () => {
+                        await db.templates.delete(t.id);
+                        setTemplates(prev => prev.filter(x => x.id !== t.id));
+                      }},
+                      { text: 'Abbrechen', style: 'cancel' },
+                    ])}
+                  >
+                    <Text style={styles.backupBtnText}>{t.name}</Text>
+                    <Text style={styles.backupBtnHint}>
+                      {t.exercises.map(e => e.name).join(' · ')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel, { marginTop: 12 }]} onPress={() => setShowTemplatesModal(false)}>
+              <Text style={styles.modalBtnCancelText}>Schließen</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Einstellungen */}
       <Modal visible={showBackupModal} transparent animationType="slide">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
@@ -137,7 +183,7 @@ export default function HomeScreen() {
             </View>
 
             <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Datensicherung</Text>
-            <TouchableOpacity style={styles.backupBtn} onPress={async () => { setShowBackupModal(false); try { await exportBackup(); } catch { Alert.alert('Fehler', 'Export fehlgeschlagen.'); } }}>
+            <TouchableOpacity style={styles.backupBtn} onPress={async () => { setShowBackupModal(false); try { await exportBackup(); } catch (e: any) { Alert.alert('Fehler', e?.message ?? 'Export fehlgeschlagen.'); } }}>
               <Text style={styles.backupBtnText}>📤 Backup exportieren</Text>
               <Text style={styles.backupBtnHint}>Alle Daten als JSON teilen</Text>
             </TouchableOpacity>

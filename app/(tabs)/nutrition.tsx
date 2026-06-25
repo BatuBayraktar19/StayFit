@@ -43,14 +43,23 @@ export default function NutritionScreen() {
   const [goal, setGoal] = useState<NutritionGoal>({ calories: 2000, protein: null });
   const [showAdd, setShowAdd] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<FoodEntry | null>(null);
 
   const [name, setName] = useState('');
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
+  const [addNote, setAddNote] = useState('');
   const [goalCalInput, setGoalCalInput] = useState('');
   const [goalProtInput, setGoalProtInput] = useState('');
+
+  const [editName, setEditName] = useState('');
+  const [editCalories, setEditCalories] = useState('');
+  const [editProtein, setEditProtein] = useState('');
+  const [editCarbs, setEditCarbs] = useState('');
+  const [editFat, setEditFat] = useState('');
+  const [editNote, setEditNote] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -96,11 +105,41 @@ export default function NutritionScreen() {
       protein: protein ? parseFloat(protein) : null,
       carbs: carbs ? parseFloat(carbs) : null,
       fat: fat ? parseFloat(fat) : null,
+      note: addNote.trim() || null,
     });
     setEntries(prev => [...prev, entry]);
     setAllEntries(prev => [...prev, entry]);
-    setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat('');
+    setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat(''); setAddNote('');
     setShowAdd(false);
+  }
+
+  function openEntry(e: FoodEntry) {
+    setSelectedEntry(e);
+    setEditName(e.name);
+    setEditCalories(String(e.calories));
+    setEditProtein(e.protein !== null ? String(e.protein) : '');
+    setEditCarbs(e.carbs !== null ? String(e.carbs) : '');
+    setEditFat(e.fat !== null ? String(e.fat) : '');
+    setEditNote(e.note ?? '');
+  }
+
+  async function saveEntry() {
+    if (!selectedEntry || !editName.trim() || !editCalories) return;
+    const cal = parseInt(editCalories);
+    if (isNaN(cal)) return;
+    const data = {
+      name: editName.trim(),
+      calories: cal,
+      protein: editProtein ? parseFloat(editProtein) : null,
+      carbs: editCarbs ? parseFloat(editCarbs) : null,
+      fat: editFat ? parseFloat(editFat) : null,
+      note: editNote.trim() || null,
+    };
+    await db.food.update(selectedEntry.id, data);
+    const updated = { ...selectedEntry, ...data };
+    setEntries(prev => prev.map(e => e.id === selectedEntry.id ? updated : e));
+    setAllEntries(prev => prev.map(e => e.id === selectedEntry.id ? updated : e));
+    setSelectedEntry(null);
   }
 
   async function deleteEntry(id: string) {
@@ -197,13 +236,14 @@ export default function NutritionScreen() {
             </View>
           ) : (
             entries.map(e => (
-              <TouchableOpacity key={e.id} style={styles.entryCard} onLongPress={() => deleteEntry(e.id)}>
+              <TouchableOpacity key={e.id} style={styles.entryCard} onPress={() => openEntry(e)}>
                 <View style={styles.entryLeft}>
                   <Text style={styles.entryName}>{e.name}</Text>
                   <View style={styles.entryMacros}>
                     {e.protein !== null && <Text style={styles.entryMacro}>P: {e.protein}g</Text>}
                     {e.carbs !== null && <Text style={styles.entryMacro}>K: {e.carbs}g</Text>}
                     {e.fat !== null && <Text style={styles.entryMacro}>F: {e.fat}g</Text>}
+                    {e.note && <Text style={styles.entryMacro}>📝</Text>}
                   </View>
                 </View>
                 <Text style={styles.entryCal}>{e.calories} kcal</Text>
@@ -250,7 +290,7 @@ export default function NutritionScreen() {
       <Modal visible={showAdd} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <ScrollView style={styles.modalBox} keyboardShouldPersistTaps="handled">
+            <ScrollView style={[styles.modalBox, { maxHeight: '88%' }]} keyboardShouldPersistTaps="handled" bounces={false}>
               <Text style={styles.modalTitle}>Mahlzeit — {formatDateLabel(viewDate)}</Text>
               <TextInput style={styles.input} placeholder="Name (z.B. Haferflocken)" placeholderTextColor={Colors.textMuted}
                 value={name} onChangeText={setName} autoFocus />
@@ -264,15 +304,84 @@ export default function NutritionScreen() {
                 <TextInput style={[styles.input, styles.macroInput]} placeholder="Fett g" placeholderTextColor={Colors.textMuted}
                   keyboardType="decimal-pad" value={fat} onChangeText={setFat} />
               </View>
+              <TextInput style={styles.noteInput} placeholder="Notiz (optional)" placeholderTextColor={Colors.textMuted}
+                value={addNote} onChangeText={setAddNote} multiline />
               <View style={styles.modalBtns}>
                 <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]}
-                  onPress={() => { setShowAdd(false); setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat(''); }}>
+                  onPress={() => { setShowAdd(false); setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat(''); setAddNote(''); }}>
                   <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={addEntry}>
                   <Text style={styles.modalBtnCreateText}>Hinzufügen</Text>
                 </TouchableOpacity>
               </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <Modal visible={!!selectedEntry} transparent animationType="slide" onRequestClose={() => setSelectedEntry(null)}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView style={[styles.modalBox, { maxHeight: '92%' }]} keyboardShouldPersistTaps="handled" bounces={false}>
+              <TextInput
+                style={styles.detailNameInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholderTextColor={Colors.textMuted}
+                placeholder="Name"
+              />
+              <View style={styles.detailCalRow}>
+                <TextInput
+                  style={styles.detailCalInput}
+                  value={editCalories}
+                  onChangeText={setEditCalories}
+                  keyboardType="number-pad"
+                  placeholderTextColor={Colors.textMuted}
+                  placeholder="0"
+                />
+                <Text style={styles.detailCalLabel}>kcal</Text>
+              </View>
+              <View style={styles.detailMacroRow}>
+                <View style={styles.detailMacroBox}>
+                  <Text style={[styles.detailMacroLabel, { color: '#5ac45a' }]}>Protein</Text>
+                  <TextInput style={styles.detailMacroInput} value={editProtein} onChangeText={setEditProtein}
+                    keyboardType="decimal-pad" placeholder="—" placeholderTextColor={Colors.textMuted} />
+                  <Text style={styles.detailMacroUnit}>g</Text>
+                </View>
+                <View style={styles.detailMacroBox}>
+                  <Text style={[styles.detailMacroLabel, { color: '#f5c400' }]}>Kohlenhydrate</Text>
+                  <TextInput style={styles.detailMacroInput} value={editCarbs} onChangeText={setEditCarbs}
+                    keyboardType="decimal-pad" placeholder="—" placeholderTextColor={Colors.textMuted} />
+                  <Text style={styles.detailMacroUnit}>g</Text>
+                </View>
+                <View style={styles.detailMacroBox}>
+                  <Text style={[styles.detailMacroLabel, { color: '#f57c00' }]}>Fett</Text>
+                  <TextInput style={styles.detailMacroInput} value={editFat} onChangeText={setEditFat}
+                    keyboardType="decimal-pad" placeholder="—" placeholderTextColor={Colors.textMuted} />
+                  <Text style={styles.detailMacroUnit}>g</Text>
+                </View>
+              </View>
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Notiz..."
+                placeholderTextColor={Colors.textMuted}
+                value={editNote}
+                onChangeText={setEditNote}
+                multiline
+              />
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: Colors.danger + '22' }]}
+                  onPress={() => { setSelectedEntry(null); if (selectedEntry) deleteEntry(selectedEntry.id); }}>
+                  <Text style={{ color: Colors.danger, fontWeight: '600' }}>Löschen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={saveEntry}>
+                  <Text style={styles.modalBtnCreateText}>Speichern</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel, { marginTop: 8 }]} onPress={() => setSelectedEntry(null)}>
+                <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+              </TouchableOpacity>
             </ScrollView>
           </KeyboardAvoidingView>
         </View>
@@ -365,5 +474,15 @@ function createStyles(Colors: ColorScheme) {
   modalBtnCancelText: { color: Colors.textSecondary, fontWeight: '500' },
   modalBtnCreate: { backgroundColor: Colors.accent },
   modalBtnCreateText: { color: '#fff', fontWeight: '600' },
+  noteInput: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, color: Colors.text, fontSize: 14, marginBottom: 10, minHeight: 60 },
+  detailNameInput: { fontSize: 22, fontWeight: '700', color: Colors.text, marginBottom: 8, paddingVertical: 4 },
+  detailCalRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 20 },
+  detailCalInput: { fontSize: 52, fontWeight: '800', color: Colors.text, lineHeight: 58, minWidth: 120 },
+  detailCalLabel: { fontSize: 18, color: Colors.textMuted, marginBottom: 10, marginLeft: 6 },
+  detailMacroRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  detailMacroBox: { flex: 1, backgroundColor: Colors.surfaceAlt, borderRadius: 12, padding: 12, alignItems: 'center' },
+  detailMacroLabel: { fontSize: 11, fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 },
+  detailMacroInput: { fontSize: 24, fontWeight: '700', color: Colors.text, textAlign: 'center', width: '100%' },
+  detailMacroUnit: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   });
 }

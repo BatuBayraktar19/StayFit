@@ -48,6 +48,42 @@ const MESSAGES = [
   "\"Wer aufgibt, gewinnt nichts.\"",
   "\"Der härteste Schritt ist der erste – aus der Tür.\"",
 
+  // Arnold
+  "\"Ich bin nicht hier um dein Freund zu sein. Ich bin hier um dich stärker zu machen.\" – Arnold Schwarzenegger",
+  "\"Wenn du sagst du kannst nicht, dann lügst du.\" – Arnold Schwarzenegger",
+  "\"Die Leute, die sagen es geht nicht – sie sind immer die, die es nicht versucht haben.\" – Arnold Schwarzenegger",
+  "\"Schlaf schneller. Wir brauchen das Kissen.\" – Arnold Schwarzenegger",
+  "\"Jede Wiederholung, die du abbrichst, ist eine, die dich nicht stärker macht.\" – Arnold Schwarzenegger",
+  "\"Niemand hat je gelitten und nichts gewonnen.\" – Arnold Schwarzenegger",
+  "\"Du hast sechs Stunden geschlafen? Das sind vier Stunden zu viel.\" – Arnold Schwarzenegger",
+
+  // Mike Tyson
+  "\"Jeder hat einen Plan – bis er einen auf die Fresse bekommt.\" – Mike Tyson",
+  "\"Disziplin ist tun was du hasst, als ob du es liebst.\" – Mike Tyson",
+  "\"Schmerz ist vorübergehend. Ruhm ist für immer.\" – Mike Tyson",
+
+  // David Goggins
+  "\"Niemand kommt um dich zu retten. Du bist auf dich allein gestellt.\" – David Goggins",
+  "\"Bleib hart.\" – David Goggins",
+  "\"Dein Kopf gibt auf, wenn du bei 40% bist. Du hast noch 60%.\" – David Goggins",
+  "\"Schmerz schaltet sich aus, wenn Stolz einschaltet.\" – David Goggins",
+  "\"Komfortzonen sind Lügen, die du dir selbst erzählst.\" – David Goggins",
+
+  // Kobe / MJ / Ronaldo
+  "\"Ruh dich aus wenn du tot bist.\" – Kobe Bryant",
+  "\"Herzschmerz ist vorübergehend. Aufgeben ist für immer.\" – Kobe Bryant",
+  "\"Talente gewinnen Spiele. Teamwork und Intelligenz gewinnen Meisterschaften.\" – Michael Jordan",
+  "\"Ich habe 9000 Würfe in meiner Karriere verfehlt. Das ist warum ich gewinne.\" – Michael Jordan",
+  "\"Talent ohne Arbeit ist nur Talent.\" – Cristiano Ronaldo",
+  "\"Deine Beine werden müde. Dein Kopf nicht. Das ist der Unterschied.\" – Cristiano Ronaldo",
+
+  // Sonstige Legenden
+  "\"Schweig und trainiere.\" – Unbekannt",
+  "\"Das Leben ist zu kurz um schwach zu bleiben.\"",
+  "\"Andere schlafen. Du trainierst. Das ist der Unterschied.\"",
+  "\"Wenn es weh tut, wächst du gerade.\"",
+  "\"Die härteste Übung ist die, die du heute weglässt.\"",
+
   // Witzig
   "Dein Protein-Shake wartet. Geh ihn verdienen.",
   "Heute: Training. Morgen: Muskelkater. Übermorgen: Legende.",
@@ -72,7 +108,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return status === 'granted';
 }
 
-export async function scheduleDailyNotification(hour = 8, minute = 30): Promise<void> {
+export async function scheduleDailyNotification(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const granted = await requestNotificationPermission();
@@ -93,17 +129,19 @@ export async function scheduleDailyNotification(hour = 8, minute = 30): Promise<
     }),
   });
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: '💪 StayFit',
-      body: getRandomMessage(),
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute,
-    },
-  });
+  for (const [hour, minute] of [[10, 0], [19, 0]]) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '💪 StayFit',
+        body: getRandomMessage(),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute,
+      },
+    });
+  }
 }
 
 export async function sendTestNotification(): Promise<void> {
