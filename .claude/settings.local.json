@@ -17,7 +17,14 @@
       "PowerShell(Stop-Process -Id 22748 -Force -ErrorAction SilentlyContinue)",
       "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\543ba\\\\Desktop\\\\GymApp\\\\app\\\\calendar\")",
       "PowerShell(npm show expo version)",
-      "Bash(node -e \"const p = require\\('./package.json'\\); const deps = {...p.dependencies, ...p.devDependencies}; ['expo-file-system','expo-sharing','expo-document-picker'].forEach\\(d => console.log\\(d, deps[d] || 'MISSING'\\)\\)\")"
+      "Bash(node -e \"const p = require\\('./package.json'\\); const deps = {...p.dependencies, ...p.devDependencies}; ['expo-file-system','expo-sharing','expo-document-picker'].forEach\\(d => console.log\\(d, deps[d] || 'MISSING'\\)\\)\")",
+      "Bash(node -e \"const p = require\\('./package.json'\\); const deps = {...p.dependencies, ...p.devDependencies}; ['expo-haptics','expo-av','expo-audio','expo-keep-awake'].forEach\\(d => console.log\\(d, deps[d] || 'MISSING'\\)\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(grep -qE \"error TS|\\\\\\\\$\" \"C:\\\\Users\\\\543ba\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-543ba-Desktop-GymApp\\\\b7b36817-bd01-49ef-b23d-c71aa07fd4ca\\\\tasks\\\\b5i38uypa.output\")",
+      "Bash(eas update *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(eas build:list --platform android --limit 3 --non-interactive)",
+      "Bash(eas build:list --platform ios --limit 3 --non-interactive)"
     ]
   }
 }

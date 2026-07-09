@@ -82,7 +82,7 @@ function YearHeatmap({ year, sessionDates, styles, Colors }: { year: number; ses
   const months = Array.from({ length: 12 }, (_, m) => {
     const days = new Date(year, m + 1, 0).getDate();
     const count = Array.from({ length: days }, (_, d) =>
-      sessionDates.has(isoDate(year, m, d + 1)) ? 1 : 0
+      Number(sessionDates.has(isoDate(year, m, d + 1)))
     ).reduce((a, b) => a + b, 0);
     return { month: m, days, count };
   });

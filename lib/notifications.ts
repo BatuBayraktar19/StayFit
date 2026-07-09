@@ -126,6 +126,8 @@ export async function scheduleDailyNotification(): Promise<void> {
       shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   });
 
@@ -150,6 +152,8 @@ export async function sendTestNotification(): Promise<void> {
       shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   });
   await Notifications.scheduleNotificationAsync({

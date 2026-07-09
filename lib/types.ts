@@ -19,6 +19,7 @@ export type Exercise = {
   session_id: string;
   name: string;
   order_index: number;
+  superset_group: string | null;
 };
 
 export type BodyWeightEntry = {

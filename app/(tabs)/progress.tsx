@@ -85,9 +85,10 @@ function WeightChart({ weights, Colors }: { weights: BodyWeightEntry[]; Colors: 
 }
 
 function VideoThumb({ uri, onPress }: { uri: string; onPress: () => void }) {
+  const Colors = useColors();
   return (
-    <TouchableOpacity onPress={onPress} style={styles.videoThumb} activeOpacity={0.8}>
-      <Text style={styles.videoPlayIcon}>▶</Text>
+    <TouchableOpacity onPress={onPress} style={{ width: PHOTO_SIZE, height: PHOTO_SIZE, borderRadius: 8, backgroundColor: Colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }} activeOpacity={0.8}>
+      <Text style={{ fontSize: 28, color: '#fff' }}>▶</Text>
     </TouchableOpacity>
   );
 }
@@ -95,7 +96,7 @@ function VideoThumb({ uri, onPress }: { uri: string; onPress: () => void }) {
 function FullscreenVideo({ uri }: { uri: string }) {
   const player = useVideoPlayer(uri, p => { p.loop = false; p.play(); });
   return (
-    <VideoView player={player} style={styles.fullscreenVideo} contentFit="contain" nativeControls />
+    <VideoView player={player} style={{ width: SCREEN_W, height: SCREEN_W * 0.75 }} contentFit="contain" nativeControls />
   );
 }
 

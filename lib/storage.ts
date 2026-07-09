@@ -89,7 +89,7 @@ export const db = {
     },
     async create(sessionId: string, name: string, orderIndex: number): Promise<Exercise> {
       const all = await get<Exercise>(KEYS.exercises);
-      const e: Exercise = { id: uuid(), session_id: sessionId, name, order_index: orderIndex };
+      const e: Exercise = { id: uuid(), session_id: sessionId, name, order_index: orderIndex, superset_group: null };
       await save(KEYS.exercises, [...all, e]);
       return e;
     },
@@ -102,6 +102,10 @@ export const db = {
     async rename(id: string, name: string): Promise<void> {
       const all = await get<Exercise>(KEYS.exercises);
       await save(KEYS.exercises, all.map(e => e.id === id ? { ...e, name } : e));
+    },
+    async setGroup(id: string, group: string | null): Promise<void> {
+      const all = await get<Exercise>(KEYS.exercises);
+      await save(KEYS.exercises, all.map(e => e.id === id ? { ...e, superset_group: group } : e));
     },
   },
 
