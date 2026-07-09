@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Image, Alert, TextInput, Modal, FlatList,
@@ -6,9 +6,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/colors';
+import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
 import { BodyWeightEntry, ProgressPhoto } from '../../lib/types';
 
@@ -30,55 +31,43 @@ function formatDateShort(d: string) {
   });
 }
 
-function WeightChart({ weights }: { weights: BodyWeightEntry[] }) {
+function WeightChart({ weights, Colors }: { weights: BodyWeightEntry[]; Colors: ColorScheme }) {
   if (weights.length < 2) {
     return (
-      <View style={styles.chartEmpty}>
-        <Text style={styles.chartEmptyText}>Mindestens 2 Einträge für Graphen</Text>
+      <View style={{ backgroundColor: Colors.surface, borderRadius: 14, padding: 24, marginBottom: 16, alignItems: 'center' }}>
+        <Text style={{ color: Colors.textMuted, fontSize: 13 }}>Mindestens 2 Einträge für Graphen</Text>
       </View>
     );
   }
-
-  const sorted = [...weights].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sorted = [...weights].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   const vals = sorted.map(w => w.weight);
   const minW = Math.min(...vals);
   const maxW = Math.max(...vals);
   const range = maxW - minW || 1;
-
   const innerW = CHART_W - PAD.left - PAD.right;
   const innerH = CHART_H - PAD.top - PAD.bottom;
-
   const toX = (i: number) => PAD.left + (i / (sorted.length - 1)) * innerW;
   const toY = (w: number) => PAD.top + (1 - (w - minW) / range) * innerH;
-
   const points = sorted.map((w, i) => `${toX(i)},${toY(w.weight)}`).join(' ');
-
   const gridWeights = [minW, minW + range * 0.5, maxW];
-
   return (
-    <View style={styles.chartBox}>
+    <View style={{ backgroundColor: Colors.surface, borderRadius: 14, padding: 8, marginBottom: 16, overflow: 'hidden' }}>
       <Svg width={CHART_W} height={CHART_H}>
-        {gridWeights.map((gw, i) => {
-          const y = toY(gw);
-          return (
-            <Line key={i} x1={PAD.left} y1={y} x2={CHART_W - PAD.right} y2={y}
-              stroke={Colors.border} strokeWidth="1" />
-          );
-        })}
+        {gridWeights.map((gw, i) => (
+          <Line key={i} x1={PAD.left} y1={toY(gw)} x2={CHART_W - PAD.right} y2={toY(gw)}
+            stroke={Colors.border} strokeWidth="1" />
+        ))}
         {gridWeights.map((gw, i) => (
           <SvgText key={i} x={PAD.left - 4} y={toY(gw) + 4}
             fontSize="9" fill={Colors.textMuted} textAnchor="end">
             {gw.toFixed(1)}
           </SvgText>
         ))}
-
         <Polyline points={points} fill="none" stroke={Colors.accent} strokeWidth="2" strokeLinejoin="round" />
-
         {sorted.map((w, i) => (
           <Circle key={w.id} cx={toX(i)} cy={toY(w.weight)} r="4"
             fill={Colors.accent} stroke={Colors.bg} strokeWidth="2" />
         ))}
-
         {sorted.map((w, i) => {
           if (sorted.length <= 6 || i === 0 || i === sorted.length - 1) {
             return (
@@ -95,55 +84,72 @@ function WeightChart({ weights }: { weights: BodyWeightEntry[] }) {
   );
 }
 
+function VideoThumb({ uri, onPress }: { uri: string; onPress: () => void }) {
+  const Colors = useColors();
+  return (
+    <TouchableOpacity onPress={onPress} style={{ width: PHOTO_SIZE, height: PHOTO_SIZE, borderRadius: 8, backgroundColor: Colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' }} activeOpacity={0.8}>
+      <Text style={{ fontSize: 28, color: '#fff' }}>▶</Text>
+    </TouchableOpacity>
+  );
+}
+
+function FullscreenVideo({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, p => { p.loop = false; p.play(); });
+  return (
+    <VideoView player={player} style={{ width: SCREEN_W, height: SCREEN_W * 0.75 }} contentFit="contain" nativeControls />
+  );
+}
+
 export default function ProgressScreen() {
+  const Colors = useColors();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [tab, setTab] = useState<'fotos' | 'gewicht'>('fotos');
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [weights, setWeights] = useState<BodyWeightEntry[]>([]);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [weightInput, setWeightInput] = useState('');
   const [weightNote, setWeightNote] = useState('');
+  const [editingWeight, setEditingWeight] = useState<BodyWeightEntry | null>(null);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<ProgressPhoto | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      db.photos.getAll().then(setPhotos);
+      db.photos.getAll().then(p => setPhotos(p.map(x => ({ ...x, type: x.type ?? 'photo' }))));
       db.bodyweight.getAll().then(setWeights);
     }, [])
   );
 
   async function pickPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Kein Zugriff', 'StayFit braucht Zugriff auf deine Fotos.');
-      return;
-    }
+    if (status !== 'granted') { Alert.alert('Kein Zugriff', 'StayFit braucht Zugriff auf deine Fotos.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images', 'videos'],
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
       const today = new Date().toISOString().split('T')[0];
-      const photo = await db.photos.add(result.assets[0].uri, today);
+      const isVideo = asset.type === 'video';
+      const photo = await db.photos.add(asset.uri, today, isVideo ? 'video' : 'photo');
       setPhotos(prev => [photo, ...prev]);
     }
   }
 
   async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Kein Zugriff', 'StayFit braucht Kamera-Zugriff.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+    if (status !== 'granted') { Alert.alert('Kein Zugriff', 'StayFit braucht Kamera-Zugriff.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8, mediaTypes: ['images', 'videos'] });
     if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
       const today = new Date().toISOString().split('T')[0];
-      const photo = await db.photos.add(result.assets[0].uri, today);
+      const isVideo = asset.type === 'video';
+      const photo = await db.photos.add(asset.uri, today, isVideo ? 'video' : 'photo');
       setPhotos(prev => [photo, ...prev]);
     }
   }
 
   async function deletePhoto(id: string) {
-    Alert.alert('Foto löschen?', '', [
+    Alert.alert('Löschen?', '', [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Löschen', style: 'destructive',
@@ -156,15 +162,46 @@ export default function ProgressScreen() {
     ]);
   }
 
-  async function addWeight() {
+  function openWeightEdit(entry: BodyWeightEntry) {
+    setEditingWeight(entry);
+    setWeightInput(String(entry.weight));
+    setWeightNote(entry.note ?? '');
+    setShowWeightModal(true);
+  }
+
+  function openWeightAdd() {
+    setEditingWeight(null);
+    setWeightInput('');
+    setWeightNote('');
+    setShowWeightModal(true);
+  }
+
+  async function saveWeight() {
     const w = parseFloat(weightInput.replace(',', '.'));
     if (!w || isNaN(w)) return;
     const today = new Date().toISOString().split('T')[0];
-    const entry = await db.bodyweight.add(w, today, weightNote || undefined);
-    setWeights(prev => [entry, ...prev]);
-    setWeightInput('');
-    setWeightNote('');
-    setShowWeightModal(false);
+    if (editingWeight) {
+      await db.bodyweight.delete(editingWeight.id);
+      const entry = await db.bodyweight.add(w, editingWeight.date, weightNote || undefined);
+      setWeights(prev => prev.map(x => x.id === editingWeight.id ? entry : x));
+    } else {
+      const entry = await db.bodyweight.add(w, today, weightNote || undefined);
+      setWeights(prev => [entry, ...prev]);
+    }
+    setWeightInput(''); setWeightNote(''); setShowWeightModal(false); setEditingWeight(null);
+  }
+
+  async function deleteWeight(id: string) {
+    Alert.alert('Eintrag löschen?', '', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Löschen', style: 'destructive',
+        onPress: async () => {
+          await db.bodyweight.delete(id);
+          setWeights(prev => prev.filter(w => w.id !== id));
+        },
+      },
+    ]);
   }
 
   const latestWeight = weights[0]?.weight;
@@ -181,16 +218,10 @@ export default function ProgressScreen() {
       </View>
 
       <View style={styles.tabRow}>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'fotos' && styles.tabBtnActive]}
-          onPress={() => setTab('fotos')}
-        >
-          <Text style={[styles.tabBtnText, tab === 'fotos' && styles.tabBtnTextActive]}>📸 Fotos</Text>
+        <TouchableOpacity style={[styles.tabBtn, tab === 'fotos' && styles.tabBtnActive]} onPress={() => setTab('fotos')}>
+          <Text style={[styles.tabBtnText, tab === 'fotos' && styles.tabBtnTextActive]}>📸 Fotos & Videos</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'gewicht' && styles.tabBtnActive]}
-          onPress={() => setTab('gewicht')}
-        >
+        <TouchableOpacity style={[styles.tabBtn, tab === 'gewicht' && styles.tabBtnActive]} onPress={() => setTab('gewicht')}>
           <Text style={[styles.tabBtnText, tab === 'gewicht' && styles.tabBtnTextActive]}>⚖️ Gewicht</Text>
         </TouchableOpacity>
       </View>
@@ -205,35 +236,34 @@ export default function ProgressScreen() {
               <Text style={styles.photoActionText}>🖼️ Galerie</Text>
             </TouchableOpacity>
           </View>
-
           {photos.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>📸</Text>
               <Text style={styles.emptyText}>Noch keine Fortschrittsfotos</Text>
-              <Text style={styles.emptyHint}>Füge dein erstes Foto hinzu</Text>
+              <Text style={styles.emptyHint}>Füge dein erstes Foto oder Video hinzu</Text>
             </View>
           ) : (
             <View style={styles.photoGrid}>
               {photos.map(p => (
-                <TouchableOpacity
-                  key={p.id}
-                  onPress={() => setFullscreenPhoto(p)}
-                  onLongPress={() => deletePhoto(p.id)}
-                  activeOpacity={0.8}
-                >
-                  <Image source={{ uri: p.uri }} style={styles.photoThumb} />
+                <View key={p.id}>
+                  {p.type === 'video' ? (
+                    <VideoThumb uri={p.uri} onPress={() => setFullscreenPhoto(p)} />
+                  ) : (
+                    <TouchableOpacity onPress={() => setFullscreenPhoto(p)} onLongPress={() => deletePhoto(p.id)} activeOpacity={0.8}>
+                      <Image source={{ uri: p.uri }} style={styles.photoThumb} />
+                    </TouchableOpacity>
+                  )}
                   <Text style={styles.photoDate}>{formatDate(p.date)}</Text>
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           )}
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
-          <TouchableOpacity style={styles.addWeightBtn} onPress={() => setShowWeightModal(true)}>
+          <TouchableOpacity style={styles.addWeightBtn} onPress={openWeightAdd}>
             <Text style={styles.addWeightBtnText}>+ Gewicht eintragen</Text>
           </TouchableOpacity>
-
           {weights.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>⚖️</Text>
@@ -241,22 +271,25 @@ export default function ProgressScreen() {
             </View>
           ) : (
             <>
-              <WeightChart weights={weights} />
+              <WeightChart weights={weights} Colors={Colors} />
               {weights.map(w => (
-                <View key={w.id} style={styles.weightRow}>
+                <TouchableOpacity key={w.id} style={styles.weightRow} onPress={() => openWeightEdit(w)} onLongPress={() => deleteWeight(w.id)}>
                   <View>
                     <Text style={styles.weightVal}>{w.weight} kg</Text>
                     {w.note && <Text style={styles.weightNote}>{w.note}</Text>}
                   </View>
-                  <Text style={styles.weightDate}>{formatDate(w.date)}</Text>
-                </View>
+                  <View style={styles.weightRight}>
+                    <Text style={styles.weightDate}>{formatDate(w.date)}</Text>
+                    <Text style={styles.editHint}>Tippen zum Bearbeiten</Text>
+                  </View>
+                </TouchableOpacity>
               ))}
             </>
           )}
         </ScrollView>
       )}
 
-      {/* Foto Vollbild */}
+      {/* Foto / Video Vollbild */}
       <Modal visible={!!fullscreenPhoto} transparent animationType="fade" onRequestClose={() => setFullscreenPhoto(null)}>
         <View style={styles.fullscreenOverlay}>
           <TouchableOpacity style={styles.fullscreenClose} onPress={() => setFullscreenPhoto(null)}>
@@ -264,7 +297,10 @@ export default function ProgressScreen() {
           </TouchableOpacity>
           {fullscreenPhoto && (
             <>
-              <Image source={{ uri: fullscreenPhoto.uri }} style={styles.fullscreenImage} resizeMode="contain" />
+              {fullscreenPhoto.type === 'video'
+                ? <FullscreenVideo uri={fullscreenPhoto.uri} />
+                : <Image source={{ uri: fullscreenPhoto.uri }} style={styles.fullscreenImage} resizeMode="contain" />
+              }
               <Text style={styles.fullscreenDate}>{formatDate(fullscreenPhoto.date)}</Text>
               <TouchableOpacity style={styles.fullscreenDelete} onPress={() => deletePhoto(fullscreenPhoto.id)}>
                 <Text style={styles.fullscreenDeleteText}>🗑️ Löschen</Text>
@@ -275,11 +311,11 @@ export default function ProgressScreen() {
       </Modal>
 
       {/* Gewicht Modal */}
-      <Modal visible={showWeightModal} transparent animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalOverlay}>
+      <Modal visible={showWeightModal} transparent animationType="slide" onRequestClose={() => setShowWeightModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <View style={styles.modalBox}>
-              <Text style={styles.modalTitle}>Gewicht eintragen</Text>
+              <Text style={styles.modalTitle}>{editingWeight ? 'Gewicht bearbeiten' : 'Gewicht eintragen'}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="z.B. 82.5"
@@ -297,25 +333,24 @@ export default function ProgressScreen() {
                 onChangeText={setWeightNote}
               />
               <View style={styles.modalBtns}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnCancel]}
-                  onPress={() => { setShowWeightModal(false); setWeightInput(''); setWeightNote(''); }}
-                >
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]}
+                  onPress={() => { setShowWeightModal(false); setEditingWeight(null); }}>
                   <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={addWeight}>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={saveWeight}>
                   <Text style={styles.modalBtnCreateText}>Speichern</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(Colors: ColorScheme) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingBottom: 8 },
   title: { fontSize: 28, fontWeight: '700', color: Colors.text },
@@ -324,7 +359,7 @@ const styles = StyleSheet.create({
   tabRow: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 12, backgroundColor: Colors.surface, borderRadius: 10, padding: 3 },
   tabBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
   tabBtnActive: { backgroundColor: Colors.accent },
-  tabBtnText: { color: Colors.textMuted, fontSize: 13, fontWeight: '500' },
+  tabBtnText: { color: Colors.textMuted, fontSize: 12, fontWeight: '500' },
   tabBtnTextActive: { color: '#fff' },
   scroll: { padding: 16, paddingBottom: 40 },
   photoActions: { flexDirection: 'row', gap: 10, marginBottom: 16 },
@@ -332,6 +367,8 @@ const styles = StyleSheet.create({
   photoActionText: { color: Colors.text, fontSize: 14, fontWeight: '500' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   photoThumb: { width: PHOTO_SIZE, height: PHOTO_SIZE, borderRadius: 8, backgroundColor: Colors.surface },
+  videoThumb: { width: PHOTO_SIZE, height: PHOTO_SIZE, borderRadius: 8, backgroundColor: Colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  videoPlayIcon: { fontSize: 28, color: '#fff' },
   photoDate: { fontSize: 10, color: Colors.textMuted, marginTop: 3, textAlign: 'center', width: PHOTO_SIZE },
   addWeightBtn: { backgroundColor: Colors.accent, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 16 },
   addWeightBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
@@ -341,7 +378,9 @@ const styles = StyleSheet.create({
   weightRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: 10, padding: 14, marginBottom: 8 },
   weightVal: { fontSize: 17, fontWeight: '600', color: Colors.text },
   weightNote: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  weightRight: { alignItems: 'flex-end' },
   weightDate: { fontSize: 13, color: Colors.textMuted },
+  editHint: { fontSize: 10, color: Colors.textMuted, marginTop: 2 },
   empty: { alignItems: 'center', marginTop: 60 },
   emptyEmoji: { fontSize: 40, marginBottom: 10 },
   emptyText: { fontSize: 16, fontWeight: '500', color: Colors.textSecondary, marginBottom: 6 },
@@ -350,10 +389,11 @@ const styles = StyleSheet.create({
   fullscreenClose: { position: 'absolute', top: 54, right: 20, zIndex: 10, padding: 10 },
   fullscreenCloseText: { color: '#fff', fontSize: 22 },
   fullscreenImage: { width: SCREEN_W, height: SCREEN_W * 1.2 },
+  fullscreenVideo: { width: SCREEN_W, height: SCREEN_W * 0.75 },
   fullscreenDate: { color: Colors.textMuted, fontSize: 13, marginTop: 12 },
   fullscreenDelete: { marginTop: 20, padding: 12, backgroundColor: Colors.surface, borderRadius: 10 },
   fullscreenDeleteText: { color: Colors.danger, fontSize: 14, fontWeight: '500' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
   modalBox: { backgroundColor: Colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 },
   modalTitle: { fontSize: 18, fontWeight: '600', color: Colors.text, marginBottom: 16 },
   input: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, color: Colors.text, fontSize: 16, marginBottom: 8 },
@@ -363,4 +403,5 @@ const styles = StyleSheet.create({
   modalBtnCancelText: { color: Colors.textSecondary, fontWeight: '500' },
   modalBtnCreate: { backgroundColor: Colors.accent },
   modalBtnCreateText: { color: '#fff', fontWeight: '600' },
-});
+  });
+}

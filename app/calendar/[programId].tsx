@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, Dimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/colors';
+import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
 import { WorkoutSession } from '../../lib/types';
 
@@ -21,9 +21,10 @@ function isoDate(y: number, m: number, d: number) {
 }
 
 function MonthGrid({
-  year, month, sessionDates, programName,
+  year, month, sessionDates, programName, styles,
 }: {
   year: number; month: number; sessionDates: Set<string>; programName: string;
+  styles: ReturnType<typeof createStyles>;
 }) {
   const firstDay = new Date(year, month, 1);
   const totalDays = new Date(year, month + 1, 0).getDate();
@@ -77,11 +78,11 @@ function MonthGrid({
   );
 }
 
-function YearHeatmap({ year, sessionDates }: { year: number; sessionDates: Set<string> }) {
+function YearHeatmap({ year, sessionDates, styles, Colors }: { year: number; sessionDates: Set<string>; styles: ReturnType<typeof createStyles>; Colors: ColorScheme }) {
   const months = Array.from({ length: 12 }, (_, m) => {
     const days = new Date(year, m + 1, 0).getDate();
     const count = Array.from({ length: days }, (_, d) =>
-      sessionDates.has(isoDate(year, m, d + 1)) ? 1 : 0
+      Number(sessionDates.has(isoDate(year, m, d + 1)))
     ).reduce((a, b) => a + b, 0);
     return { month: m, days, count };
   });
@@ -105,6 +106,8 @@ function YearHeatmap({ year, sessionDates }: { year: number; sessionDates: Set<s
 }
 
 export default function CalendarScreen() {
+  const Colors = useColors();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const { programId } = useLocalSearchParams<{ programId: string }>();
   const router = useRouter();
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
@@ -204,16 +207,18 @@ export default function CalendarScreen() {
             month={currentMonth}
             sessionDates={sessionDates}
             programName={programName}
+            styles={styles}
           />
         ) : (
-          <YearHeatmap year={currentYear} sessionDates={sessionDates} />
+          <YearHeatmap year={currentYear} sessionDates={sessionDates} styles={styles} Colors={Colors} />
         )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(Colors: ColorScheme) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingBottom: 8 },
   backBtn: { color: Colors.accent, fontSize: 17, width: 60 },
@@ -250,4 +255,5 @@ const styles = StyleSheet.create({
   heatCell: { width: (SCREEN_W - 32 - 24) / 4, height: (SCREEN_W - 32 - 24) / 4, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   heatMonth: { fontSize: 12, color: Colors.textSecondary, fontWeight: '500' },
   heatCount: { fontSize: 18, fontWeight: '700', color: '#fff', marginTop: 2 },
-});
+  });
+}

@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Modal, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/colors';
+import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
 import { STANDARDS, getRank, RANK_CONFIG, Rank, Standard } from '../../lib/strengthStandards';
 import { WorkoutSet, Exercise } from '../../lib/types';
@@ -13,6 +13,8 @@ import { WorkoutSet, Exercise } from '../../lib/types';
 type BestLift = { exerciseName: string; weight: number; standard: Standard };
 
 export default function StatsScreen() {
+  const Colors = useColors();
+  const styles = useMemo(() => createStyles(Colors), [Colors]);
   const [bestLifts, setBestLifts] = useState<BestLift[]>([]);
   const [selected, setSelected] = useState<BestLift | null>(null);
   const [filterRank, setFilterRank] = useState<Rank | 'all'>('all');
@@ -179,7 +181,8 @@ export default function StatsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(Colors: ColorScheme) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.bg },
   header: { padding: 16, paddingBottom: 8 },
   title: { fontSize: 28, fontWeight: '700', color: Colors.text },
@@ -220,4 +223,5 @@ const styles = StyleSheet.create({
   currentRankText: { fontSize: 16, fontWeight: '700' },
   closeBtn: { backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, alignItems: 'center' },
   closeBtnText: { color: Colors.textSecondary, fontWeight: '500' },
-});
+  });
+}

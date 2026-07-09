@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 
-const BACKUP_KEYS = ['programs', 'sessions', 'exercises', 'sets', 'bodyweight', 'photos'];
+const BACKUP_KEYS = ['programs', 'sessions', 'exercises', 'sets', 'bodyweight', 'photos', 'food', 'nutritionGoal', 'templates'];
 
 export async function exportBackup(): Promise<void> {
   const data: Record<string, unknown> = { version: 1, exportedAt: new Date().toISOString() };
@@ -18,13 +18,14 @@ export async function exportBackup(): Promise<void> {
 
   await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
 
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(path, {
-      mimeType: 'application/json',
-      dialogTitle: 'StayFit Backup teilen',
-      UTI: 'public.json',
-    });
-  }
+  const available = await Sharing.isAvailableAsync();
+  if (!available) throw new Error('Teilen nicht verfügbar auf diesem Gerät.');
+
+  await Sharing.shareAsync(path, {
+    mimeType: 'application/json',
+    dialogTitle: 'StayFit Backup teilen',
+    UTI: 'public.json',
+  });
 }
 
 export async function importBackup(): Promise<{ success: boolean; message: string }> {
