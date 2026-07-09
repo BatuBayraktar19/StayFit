@@ -146,6 +146,54 @@ export async function scheduleDailyNotification(): Promise<void> {
   }
 }
 
+export async function schedulePlannedWorkoutNotification(date: string, time: string | null, name: string): Promise<string | null> {
+  const granted = await requestNotificationPermission();
+  if (!granted) return null;
+
+  const [h, m] = (time ?? '08:00').split(':').map(Number);
+  const fireDate = new Date(date + 'T00:00:00');
+  fireDate.setHours(h, m, 0, 0);
+  if (fireDate.getTime() <= Date.now()) return null;
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('planned', {
+      name: 'Geplante Workouts',
+      importance: Notifications.AndroidImportance.HIGH,
+    });
+  }
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '💪 StayFit — Training steht an',
+      body: `Zeit für "${name}"`,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: fireDate,
+    },
+  });
+  return id;
+}
+
+export async function cancelPlannedWorkoutNotification(notificationId: string | null): Promise<void> {
+  if (!notificationId) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(notificationId);
+  } catch {
+    // notification may already have fired or been cancelled
+  }
+}
+
 export async function sendTestNotification(): Promise<void> {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({

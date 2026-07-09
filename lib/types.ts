@@ -12,7 +12,11 @@ export type WorkoutSession = {
   date: string;
   notes: string | null;
   created_at: string;
+  started_at: string | null;
+  duration_minutes: number | null;
 };
+
+export type ExerciseType = 'strength' | 'cardio';
 
 export type Exercise = {
   id: string;
@@ -20,6 +24,30 @@ export type Exercise = {
   name: string;
   order_index: number;
   superset_group: string | null;
+  type: ExerciseType;
+  cardio_note: string | null;
+};
+
+export type PlannedWorkout = {
+  id: string;
+  program_id: string;
+  name: string;
+  date: string;
+  time: string | null;
+  template_id: string | null;
+  notification_id: string | null;
+  created_at: string;
+};
+
+export type MeasurementType =
+  | 'neck' | 'shoulders' | 'chest' | 'bicep_left' | 'bicep_right'
+  | 'waist' | 'hips' | 'thigh_left' | 'thigh_right' | 'calf_left' | 'calf_right';
+
+export type BodyMeasurement = {
+  id: string;
+  type: MeasurementType;
+  value: number;
+  date: string;
 };
 
 export type BodyWeightEntry = {

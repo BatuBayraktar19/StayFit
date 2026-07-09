@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Program, WorkoutSession, Exercise, WorkoutSet, BodyWeightEntry, ProgressPhoto, FoodEntry, NutritionGoal, WorkoutTemplate } from './types';
+import { Program, WorkoutSession, Exercise, ExerciseType, WorkoutSet, BodyWeightEntry, ProgressPhoto, FoodEntry, NutritionGoal, WorkoutTemplate, PlannedWorkout, BodyMeasurement, MeasurementType } from './types';
 
 const KEYS = {
   programs: 'programs',
@@ -10,6 +10,8 @@ const KEYS = {
   photos: 'photos',
   food: 'food',
   nutritionGoal: 'nutritionGoal',
+  plannedWorkouts: 'plannedWorkouts',
+  bodyMeasurements: 'bodyMeasurements',
 };
 
 function uuid() {
@@ -63,6 +65,8 @@ export const db = {
         date,
         notes: null,
         created_at: new Date().toISOString(),
+        started_at: null,
+        duration_minutes: null,
       };
       await save(KEYS.sessions, [...all, s]);
       return s;
@@ -70,6 +74,14 @@ export const db = {
     async rename(id: string, name: string): Promise<void> {
       const all = await get<WorkoutSession>(KEYS.sessions);
       await save(KEYS.sessions, all.map(s => s.id === id ? { ...s, name } : s));
+    },
+    async setStartedAt(id: string, startedAt: string): Promise<void> {
+      const all = await get<WorkoutSession>(KEYS.sessions);
+      await save(KEYS.sessions, all.map(s => s.id === id ? { ...s, started_at: startedAt } : s));
+    },
+    async setDuration(id: string, minutes: number): Promise<void> {
+      const all = await get<WorkoutSession>(KEYS.sessions);
+      await save(KEYS.sessions, all.map(s => s.id === id ? { ...s, duration_minutes: minutes } : s));
     },
     async delete(id: string): Promise<void> {
       const all = await get<WorkoutSession>(KEYS.sessions);
@@ -87,9 +99,9 @@ export const db = {
       const all = await get<Exercise>(KEYS.exercises);
       return all.filter(e => e.session_id === sessionId).sort((a, b) => a.order_index - b.order_index);
     },
-    async create(sessionId: string, name: string, orderIndex: number): Promise<Exercise> {
+    async create(sessionId: string, name: string, orderIndex: number, type: ExerciseType = 'strength'): Promise<Exercise> {
       const all = await get<Exercise>(KEYS.exercises);
-      const e: Exercise = { id: uuid(), session_id: sessionId, name, order_index: orderIndex, superset_group: null };
+      const e: Exercise = { id: uuid(), session_id: sessionId, name, order_index: orderIndex, superset_group: null, type, cardio_note: null };
       await save(KEYS.exercises, [...all, e]);
       return e;
     },
@@ -106,6 +118,10 @@ export const db = {
     async setGroup(id: string, group: string | null): Promise<void> {
       const all = await get<Exercise>(KEYS.exercises);
       await save(KEYS.exercises, all.map(e => e.id === id ? { ...e, superset_group: group } : e));
+    },
+    async setCardioNote(id: string, note: string | null): Promise<void> {
+      const all = await get<Exercise>(KEYS.exercises);
+      await save(KEYS.exercises, all.map(e => e.id === id ? { ...e, cardio_note: note } : e));
     },
   },
 
@@ -212,6 +228,56 @@ export const db = {
     async delete(id: string): Promise<void> {
       const all = await get<WorkoutSet>(KEYS.sets);
       await save(KEYS.sets, all.filter(s => s.id !== id));
+    },
+  },
+
+  plannedWorkouts: {
+    async getAll(): Promise<PlannedWorkout[]> {
+      const all = await get<PlannedWorkout>(KEYS.plannedWorkouts);
+      return all.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time ?? '').localeCompare(b.time ?? ''));
+    },
+    async getByProgram(programId: string): Promise<PlannedWorkout[]> {
+      const all = await this.getAll();
+      return all.filter(p => p.program_id === programId);
+    },
+    async create(data: Omit<PlannedWorkout, 'id' | 'created_at'>): Promise<PlannedWorkout> {
+      const all = await get<PlannedWorkout>(KEYS.plannedWorkouts);
+      const p: PlannedWorkout = { id: uuid(), created_at: new Date().toISOString(), ...data };
+      await save(KEYS.plannedWorkouts, [...all, p]);
+      return p;
+    },
+    async delete(id: string): Promise<void> {
+      const all = await get<PlannedWorkout>(KEYS.plannedWorkouts);
+      await save(KEYS.plannedWorkouts, all.filter(p => p.id !== id));
+    },
+  },
+
+  bodyMeasurements: {
+    async getAll(): Promise<BodyMeasurement[]> {
+      const all = await get<BodyMeasurement>(KEYS.bodyMeasurements);
+      return all.sort((a, b) => b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
+    },
+    async getLatest(): Promise<Partial<Record<MeasurementType, BodyMeasurement>>> {
+      const all = await this.getAll();
+      const latest: Partial<Record<MeasurementType, BodyMeasurement>> = {};
+      for (const m of all) {
+        if (!latest[m.type]) latest[m.type] = m;
+      }
+      return latest;
+    },
+    async getByType(type: MeasurementType): Promise<BodyMeasurement[]> {
+      const all = await this.getAll();
+      return all.filter(m => m.type === type);
+    },
+    async add(type: MeasurementType, value: number, date: string): Promise<BodyMeasurement> {
+      const all = await get<BodyMeasurement>(KEYS.bodyMeasurements);
+      const m: BodyMeasurement = { id: uuid(), type, value, date };
+      await save(KEYS.bodyMeasurements, [...all, m]);
+      return m;
+    },
+    async delete(id: string): Promise<void> {
+      const all = await get<BodyMeasurement>(KEYS.bodyMeasurements);
+      await save(KEYS.bodyMeasurements, all.filter(m => m.id !== id));
     },
   },
 };

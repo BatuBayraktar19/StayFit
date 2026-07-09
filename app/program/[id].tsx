@@ -1,16 +1,23 @@
 import { useCallback, useState, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
+  Alert, Modal, TextInput, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { useColors, ColorScheme } from '../../lib/theme';
 import { db } from '../../lib/storage';
-import { Program, WorkoutSession, WorkoutTemplate } from '../../lib/types';
+import { Program, WorkoutSession, WorkoutTemplate, PlannedWorkout } from '../../lib/types';
+import { schedulePlannedWorkoutNotification, cancelPlannedWorkoutNotification } from '../../lib/notifications';
+import { DatePickerModal } from '../../components/DatePickerModal';
 
 const DAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function getMiniCalendar(sessions: WorkoutSession[]) {
   const today = new Date();
@@ -40,15 +47,26 @@ export default function ProgramScreen() {
   const [program, setProgram] = useState<Program | null>(null);
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [planned, setPlanned] = useState<PlannedWorkout[]>([]);
 
   const [showNewModal, setShowNewModal] = useState(false);
   const [showPickModal, setShowPickModal] = useState(false); // scratch vs template
   const [showTemplateList, setShowTemplateList] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renamingSession, setRenamingSession] = useState<WorkoutSession | null>(null);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showSessionDatePicker, setShowSessionDatePicker] = useState(false);
+  const [showPlanDatePicker, setShowPlanDatePicker] = useState(false);
 
   const [sessionName, setSessionName] = useState('');
   const [renameInput, setRenameInput] = useState('');
+  const [sessionDate, setSessionDate] = useState(todayStr());
+
+  const [planName, setPlanName] = useState('');
+  const [planDate, setPlanDate] = useState(todayStr());
+  const [planHour, setPlanHour] = useState('08');
+  const [planMinute, setPlanMinute] = useState('00');
+  const [planTemplateId, setPlanTemplateId] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,28 +76,77 @@ export default function ProgramScreen() {
       });
       db.sessions.getByProgram(id!).then(setSessions);
       db.templates.getAll().then(setTemplates);
+      db.plannedWorkouts.getByProgram(id!).then(setPlanned);
     }, [id])
   );
 
   async function createSession() {
     const name = sessionName.trim();
     if (!name || !id) return;
-    const today = new Date().toISOString().split('T')[0];
-    const session = await db.sessions.create(id, name, today);
+    const session = await db.sessions.create(id, name, sessionDate);
     setSessionName('');
+    setSessionDate(todayStr());
     setShowNewModal(false);
     router.push(`/workout/${session.id}`);
   }
 
   async function createFromTemplate(template: WorkoutTemplate) {
     if (!id) return;
-    const today = new Date().toISOString().split('T')[0];
-    const session = await db.sessions.create(id, template.name, today);
+    const session = await db.sessions.create(id, template.name, sessionDate);
     for (const ex of template.exercises) {
       await db.exercises.create(session.id, ex.name, ex.order_index);
     }
+    setSessionDate(todayStr());
     setShowTemplateList(false);
     router.push(`/workout/${session.id}`);
+  }
+
+  async function createPlan() {
+    const name = planName.trim();
+    if (!name || !id) return;
+    const time = `${planHour.padStart(2, '0')}:${planMinute.padStart(2, '0')}`;
+    const notificationId = await schedulePlannedWorkoutNotification(planDate, time, name);
+    const plan = await db.plannedWorkouts.create({
+      program_id: id, name, date: planDate, time, template_id: planTemplateId, notification_id: notificationId,
+    });
+    setPlanned(prev => [...prev, plan].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time ?? '').localeCompare(b.time ?? '')));
+    setShowPlanModal(false);
+    setPlanName(''); setPlanTemplateId(null); setPlanDate(todayStr()); setPlanHour('08'); setPlanMinute('00');
+  }
+
+  async function startPlanned(plan: PlannedWorkout) {
+    if (!id) return;
+    const session = await db.sessions.create(id, plan.name, todayStr());
+    if (plan.template_id) {
+      const template = templates.find(t => t.id === plan.template_id);
+      if (template) {
+        for (const ex of template.exercises) {
+          await db.exercises.create(session.id, ex.name, ex.order_index);
+        }
+      }
+    }
+    await cancelPlannedWorkoutNotification(plan.notification_id);
+    await db.plannedWorkouts.delete(plan.id);
+    setPlanned(prev => prev.filter(p => p.id !== plan.id));
+    router.push(`/workout/${session.id}`);
+  }
+
+  function deletePlanned(plan: PlannedWorkout) {
+    Alert.alert('Geplantes Training löschen?', '', [
+      { text: 'Abbrechen', style: 'cancel' },
+      {
+        text: 'Löschen', style: 'destructive',
+        onPress: async () => {
+          await cancelPlannedWorkoutNotification(plan.notification_id);
+          await db.plannedWorkouts.delete(plan.id);
+          setPlanned(prev => prev.filter(p => p.id !== plan.id));
+        },
+      },
+    ]);
+  }
+
+  function formatPlanDate(dateStr: string, time: string | null) {
+    return `${formatDate(dateStr)}${time ? ` · ${time}` : ''}`;
   }
 
   async function renameSession() {
@@ -123,7 +190,10 @@ export default function ProgramScreen() {
                 <TouchableOpacity style={styles.calBtn} onPress={() => router.push(`/calendar/${id}`)}>
                   <Text style={styles.calBtnText}>📅 Kalender</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.addBtn} onPress={() => setShowPickModal(true)}>
+                <TouchableOpacity style={styles.calBtn} onPress={() => setShowPlanModal(true)}>
+                  <Text style={styles.calBtnText}>🗓️ Planen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.addBtn} onPress={() => { setSessionDate(todayStr()); setShowPickModal(true); }}>
                   <Text style={styles.addBtnText}>+ Workout</Text>
                 </TouchableOpacity>
               </View>
@@ -152,6 +222,26 @@ export default function ProgramScreen() {
               ))}
             </View>
 
+            {planned.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Geplant</Text>
+                {planned.map(p => (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={styles.plannedCard}
+                    onPress={() => startPlanned(p)}
+                    onLongPress={() => deletePlanned(p)}
+                  >
+                    <View style={styles.sessionLeft}>
+                      <Text style={styles.sessionName}>{p.name}</Text>
+                      <Text style={styles.sessionDate}>{formatPlanDate(p.date, p.time)}</Text>
+                    </View>
+                    <Text style={styles.plannedStart}>▶ Starten</Text>
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+
             <Text style={styles.sectionLabel}>Sessions</Text>
           </>
         }
@@ -175,7 +265,9 @@ export default function ProgramScreen() {
           >
             <View style={styles.sessionLeft}>
               <Text style={styles.sessionName}>{item.name}</Text>
-              <Text style={styles.sessionDate}>{formatDate(item.date)}</Text>
+              <Text style={styles.sessionDate}>
+                {formatDate(item.date)}{item.duration_minutes ? ` · ${item.duration_minutes} min` : ''}
+              </Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
@@ -220,6 +312,10 @@ export default function ProgramScreen() {
               returnKeyType="done"
               onSubmitEditing={createSession}
             />
+            <TouchableOpacity style={styles.dateRow} onPress={() => { Keyboard.dismiss(); setShowSessionDatePicker(true); }}>
+              <Text style={styles.dateRowLabel}>📅 Datum</Text>
+              <Text style={styles.dateRowValue}>{formatDate(sessionDate)}</Text>
+            </TouchableOpacity>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => { setShowNewModal(false); setSessionName(''); }}>
                 <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
@@ -239,6 +335,10 @@ export default function ProgramScreen() {
           <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Template wählen</Text>
+            <TouchableOpacity style={styles.dateRow} onPress={() => { Keyboard.dismiss(); setShowSessionDatePicker(true); }}>
+              <Text style={styles.dateRowLabel}>📅 Datum</Text>
+              <Text style={styles.dateRowValue}>{formatDate(sessionDate)}</Text>
+            </TouchableOpacity>
             {templates.length === 0 ? (
               <Text style={styles.noTemplates}>Noch keine Templates. Speichere ein Workout als Template.</Text>
             ) : (
@@ -295,6 +395,84 @@ export default function ProgramScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Training planen */}
+      <Modal visible={showPlanModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>🗓️ Training planen</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Name, z.B. Push Day"
+                placeholderTextColor={Colors.textMuted}
+                value={planName}
+                onChangeText={setPlanName}
+              />
+              <TouchableOpacity style={styles.dateRow} onPress={() => { Keyboard.dismiss(); setShowPlanDatePicker(true); }}>
+                <Text style={styles.dateRowLabel}>📅 Datum</Text>
+                <Text style={styles.dateRowValue}>{formatDate(planDate)}</Text>
+              </TouchableOpacity>
+              <View style={styles.timeRow}>
+                <Text style={styles.dateRowLabel}>⏰ Uhrzeit</Text>
+                <View style={styles.timeInputs}>
+                  <TextInput style={styles.timeInput} value={planHour} onChangeText={setPlanHour} keyboardType="number-pad" maxLength={2} />
+                  <Text style={styles.timeColon}>:</Text>
+                  <TextInput style={styles.timeInput} value={planMinute} onChangeText={setPlanMinute} keyboardType="number-pad" maxLength={2} />
+                </View>
+              </View>
+              {templates.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: 6 }]}>Template (optional)</Text>
+                  <View style={styles.planTemplateRow}>
+                    <TouchableOpacity
+                      style={[styles.planTemplateChip, planTemplateId === null && styles.planTemplateChipActive]}
+                      onPress={() => setPlanTemplateId(null)}
+                    >
+                      <Text style={[styles.planTemplateChipText, planTemplateId === null && styles.planTemplateChipTextActive]}>Keins</Text>
+                    </TouchableOpacity>
+                    {templates.map(t => (
+                      <TouchableOpacity
+                        key={t.id}
+                        style={[styles.planTemplateChip, planTemplateId === t.id && styles.planTemplateChipActive]}
+                        onPress={() => setPlanTemplateId(t.id)}
+                      >
+                        <Text style={[styles.planTemplateChipText, planTemplateId === t.id && styles.planTemplateChipTextActive]}>{t.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowPlanModal(false)}>
+                  <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCreate]} onPress={createPlan}>
+                  <Text style={styles.modalBtnCreateText}>Planen</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      <DatePickerModal
+        visible={showSessionDatePicker}
+        initialDate={sessionDate}
+        maxDate={todayStr()}
+        Colors={Colors}
+        onConfirm={(d) => { setSessionDate(d); setShowSessionDatePicker(false); }}
+        onCancel={() => setShowSessionDatePicker(false)}
+      />
+
+      <DatePickerModal
+        visible={showPlanDatePicker}
+        initialDate={planDate}
+        minDate={todayStr()}
+        Colors={Colors}
+        onConfirm={(d) => { setPlanDate(d); setShowPlanDatePicker(false); }}
+        onCancel={() => setShowPlanDatePicker(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -349,5 +527,29 @@ function createStyles(Colors: ColorScheme) {
   modalBtnCancelText: { color: Colors.textSecondary, fontWeight: '500' },
   modalBtnCreate: { backgroundColor: Colors.accent },
   modalBtnCreateText: { color: '#fff', fontWeight: '600' },
+  plannedCard: {
+    backgroundColor: Colors.surfaceAlt, borderRadius: 12, padding: 14, marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: Colors.accentWarm + '55',
+  },
+  plannedStart: { color: Colors.accentWarm, fontSize: 13, fontWeight: '600' },
+  dateRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, marginBottom: 10,
+  },
+  dateRowLabel: { color: Colors.textSecondary, fontSize: 14 },
+  dateRowValue: { color: Colors.text, fontSize: 14, fontWeight: '600' },
+  timeRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 14, marginBottom: 10,
+  },
+  timeInputs: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  timeInput: { backgroundColor: Colors.surface, borderRadius: 8, padding: 8, color: Colors.text, fontSize: 15, width: 42, textAlign: 'center' },
+  timeColon: { color: Colors.text, fontSize: 16, fontWeight: '700' },
+  planTemplateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  planTemplateChip: { backgroundColor: Colors.surfaceAlt, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: Colors.border },
+  planTemplateChipActive: { backgroundColor: Colors.accent + '22', borderColor: Colors.accent },
+  planTemplateChipText: { color: Colors.textSecondary, fontSize: 12 },
+  planTemplateChipTextActive: { color: Colors.accent, fontWeight: '600' },
   });
 }

@@ -26,9 +26,9 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: 'Training', tabBarLabel: 'Training', tabBarIcon: ({ focused }) => <TabIcon emoji="🏋️" focused={focused} /> }} />
       <Tabs.Screen name="progress" options={{ title: 'Fortschritt', tabBarLabel: 'Fortschritt', tabBarIcon: ({ focused }) => <TabIcon emoji="📸" focused={focused} /> }} />
       <Tabs.Screen name="lexikon" options={{ title: 'Lexikon', tabBarLabel: 'Lexikon', tabBarIcon: ({ focused }) => <TabIcon emoji="📖" focused={focused} /> }} />
-      <Tabs.Screen name="stats" options={{ title: 'Stärke', tabBarLabel: 'Stärke', tabBarIcon: ({ focused }) => <TabIcon emoji="💪" focused={focused} /> }} />
       <Tabs.Screen name="nutrition" options={{ title: 'Kalorien', tabBarLabel: 'Kalorien', tabBarIcon: ({ focused }) => <TabIcon emoji="🍽️" focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
+      <Tabs.Screen name="stats" options={{ href: null }} />
     </Tabs>
   );
 }

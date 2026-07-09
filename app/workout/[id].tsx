@@ -123,6 +123,28 @@ function SetRow({
   );
 }
 
+function CardioNoteInput({
+  ex, onSave, styles, Colors,
+}: {
+  ex: ExerciseWithSets;
+  onSave: (id: string, note: string) => void;
+  styles: ReturnType<typeof createStyles>;
+  Colors: ColorScheme;
+}) {
+  const [note, setNote] = useState(ex.cardio_note ?? '');
+  return (
+    <TextInput
+      style={styles.cardioInput}
+      placeholder="z.B. 30 min Laufen, 5km, HF Ø 150..."
+      placeholderTextColor={Colors.textMuted}
+      value={note}
+      onChangeText={setNote}
+      onBlur={() => onSave(ex.id, note)}
+      multiline
+    />
+  );
+}
+
 function ExerciseBlock({
   ex,
   onAddSet,
@@ -132,6 +154,7 @@ function ExerciseBlock({
   onRenameRequest,
   onStartRest,
   onLinkPress,
+  onSaveCardioNote,
   isLinking,
   badge,
   grouped,
@@ -147,6 +170,7 @@ function ExerciseBlock({
   onRenameRequest: (id: string) => void;
   onStartRest: (seconds: number) => void;
   onLinkPress: (id: string) => void;
+  onSaveCardioNote: (id: string, note: string) => void;
   isLinking: boolean;
   badge: string | null;
   grouped: boolean;
@@ -165,6 +189,7 @@ function ExerciseBlock({
     ]}>
       <View style={styles.exHeader}>
         <View style={styles.exNameRow}>
+          {ex.type === 'cardio' && <Text style={styles.cardioIcon}>🏃</Text>}
           {badge && (
             <View style={styles.supersetBadge}>
               <Text style={styles.supersetBadgeText}>{badge}</Text>
@@ -179,35 +204,47 @@ function ExerciseBlock({
 
       {showOptions && (
         <View style={styles.exOptions}>
-          <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, false, false); setShowOptions(false); }}>
-            <Text style={styles.exOptionText}>+ Satz</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, true, false); setShowOptions(false); }}>
-            <Text style={styles.exOptionText}>+ Warmup</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, false, true); setShowOptions(false); }}>
-            <Text style={styles.exOptionText}>+ L/R Satz</Text>
-          </TouchableOpacity>
+          {ex.type !== 'cardio' && (
+            <>
+              <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, false, false); setShowOptions(false); }}>
+                <Text style={styles.exOptionText}>+ Satz</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, true, false); setShowOptions(false); }}>
+                <Text style={styles.exOptionText}>+ Warmup</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onAddSet(ex.id, false, true); setShowOptions(false); }}>
+                <Text style={styles.exOptionText}>+ L/R Satz</Text>
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onRenameRequest(ex.id); setShowOptions(false); }}>
             <Text style={styles.exOptionText}>✏️ Umbenennen</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onLinkPress(ex.id); setShowOptions(false); }}>
-            <Text style={styles.exOptionText}>{ex.superset_group ? '🔓 Superset lösen' : '🔗 Superset verbinden'}</Text>
-          </TouchableOpacity>
+          {ex.type !== 'cardio' && (
+            <TouchableOpacity style={styles.exOptionBtn} onPress={() => { onLinkPress(ex.id); setShowOptions(false); }}>
+              <Text style={styles.exOptionText}>{ex.superset_group ? '🔓 Superset lösen' : '🔗 Superset verbinden'}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={[styles.exOptionBtn, { borderColor: Colors.danger }]} onPress={() => onDelete(ex.id)}>
             <Text style={[styles.exOptionText, { color: Colors.danger }]}>Übung löschen</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {ex.sets.map(set => (
-        <SetRow key={set.id} set={set} onUpdate={onUpdateSet} onDelete={onDeleteSet} onStartRest={onStartRest} styles={styles} Colors={Colors} />
-      ))}
+      {ex.type === 'cardio' ? (
+        <CardioNoteInput ex={ex} onSave={onSaveCardioNote} styles={styles} Colors={Colors} />
+      ) : (
+        <>
+          {ex.sets.map(set => (
+            <SetRow key={set.id} set={set} onUpdate={onUpdateSet} onDelete={onDeleteSet} onStartRest={onStartRest} styles={styles} Colors={Colors} />
+          ))}
 
-      {ex.sets.length === 0 && (
-        <TouchableOpacity style={styles.addFirstSet} onPress={() => onAddSet(ex.id, false, false)}>
-          <Text style={styles.addFirstSetText}>+ Ersten Satz hinzufügen</Text>
-        </TouchableOpacity>
+          {ex.sets.length === 0 && (
+            <TouchableOpacity style={styles.addFirstSet} onPress={() => onAddSet(ex.id, false, false)}>
+              <Text style={styles.addFirstSetText}>+ Ersten Satz hinzufügen</Text>
+            </TouchableOpacity>
+          )}
+        </>
       )}
     </View>
   );
@@ -222,6 +259,7 @@ export default function WorkoutScreen() {
   const [exercises, setExercises] = useState<ExerciseWithSets[]>([]);
   const [showAddEx, setShowAddEx] = useState(false);
   const [newExName, setNewExName] = useState('');
+  const [newExType, setNewExType] = useState<'strength' | 'cardio'>('strength');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -267,7 +305,14 @@ export default function WorkoutScreen() {
       return results;
     })();
     const s = allSessionsFlat.find(x => x.id === id);
-    if (s) setSession(s);
+    if (s) {
+      if (!s.started_at) {
+        const startedAt = new Date().toISOString();
+        await db.sessions.setStartedAt(s.id, startedAt);
+        s.started_at = startedAt;
+      }
+      setSession(s);
+    }
 
     const exList = await db.exercises.getBySession(id);
     const exWithSets: ExerciseWithSets[] = await Promise.all(
@@ -303,7 +348,7 @@ export default function WorkoutScreen() {
 
   async function searchExercises(query: string) {
     setNewExName(query);
-    if (query.trim().length < 2) { setSuggestions([]); return; }
+    if (newExType === 'cardio' || query.trim().length < 2) { setSuggestions([]); return; }
     setSearchLoading(true);
     try {
       const res = await fetch(
@@ -322,10 +367,24 @@ export default function WorkoutScreen() {
   async function addExercise() {
     const name = newExName.trim();
     if (!name || !id) return;
-    const ex = await db.exercises.create(id, name, exercises.length);
+    const ex = await db.exercises.create(id, name, exercises.length, newExType);
     setExercises(prev => [...prev, { ...ex, sets: [] }]);
     setNewExName('');
+    setNewExType('strength');
     setShowAddEx(false);
+  }
+
+  function saveCardioNote(exerciseId: string, note: string) {
+    setExercises(prev => prev.map(e => e.id === exerciseId ? { ...e, cardio_note: note || null } : e));
+    db.exercises.setCardioNote(exerciseId, note || null);
+  }
+
+  async function finishWorkout() {
+    if (!session?.started_at) return;
+    const minutes = Math.max(1, Math.round((Date.now() - new Date(session.started_at).getTime()) / 60000));
+    await db.sessions.setDuration(session.id, minutes);
+    setSession(prev => prev ? { ...prev, duration_minutes: minutes } : prev);
+    Alert.alert('Workout beendet ✓', `Dauer: ${minutes} min`);
   }
 
   async function addSet(exerciseId: string, warmup: boolean, bilateral: boolean) {
@@ -536,7 +595,10 @@ export default function WorkoutScreen() {
         </View>
 
         <Text style={styles.sessionTitle}>{session?.name ?? ''}</Text>
-        <Text style={styles.sessionDate}>{session ? formatDate(session.date) : ''}</Text>
+        <Text style={styles.sessionDate}>
+          {session ? formatDate(session.date) : ''}
+          {session?.duration_minutes ? ` · ⏱ ${session.duration_minutes} min` : ''}
+        </Text>
 
         {linkingExId && (
           <View style={styles.linkHint}>
@@ -558,6 +620,7 @@ export default function WorkoutScreen() {
             onRenameRequest={handleRenameRequest}
             onStartRest={startRest}
             onLinkPress={handleLinkPress}
+            onSaveCardioNote={saveCardioNote}
             isLinking={linkingExId === ex.id}
             badge={badge}
             grouped={grouped}
@@ -572,9 +635,14 @@ export default function WorkoutScreen() {
         </TouchableOpacity>
 
         {exercises.length > 0 && (
-          <TouchableOpacity style={styles.templateBtn} onPress={saveAsTemplate}>
-            <Text style={styles.templateBtnText}>📋 Als Template speichern</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={styles.finishBtn} onPress={finishWorkout}>
+              <Text style={styles.finishBtnText}>✓ Workout beenden</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.templateBtn} onPress={saveAsTemplate}>
+              <Text style={styles.templateBtnText}>📋 Als Template speichern</Text>
+            </TouchableOpacity>
+          </>
         )}
       </ScrollView>
       </KeyboardAvoidingView>
@@ -644,10 +712,24 @@ export default function WorkoutScreen() {
           <KeyboardAvoidingView style={{ flex: 1, justifyContent: 'flex-end' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Übung hinzufügen</Text>
+            <View style={styles.typeToggleRow}>
+              <TouchableOpacity
+                style={[styles.typeToggleBtn, newExType === 'strength' && styles.typeToggleBtnActive]}
+                onPress={() => { setNewExType('strength'); }}
+              >
+                <Text style={[styles.typeToggleText, newExType === 'strength' && styles.typeToggleTextActive]}>🏋️ Kraft</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeToggleBtn, newExType === 'cardio' && styles.typeToggleBtnActive]}
+                onPress={() => { setNewExType('cardio'); setSuggestions([]); }}
+              >
+                <Text style={[styles.typeToggleText, newExType === 'cardio' && styles.typeToggleTextActive]}>🏃 Cardio / Freitext</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.searchRow}>
               <TextInput
                 style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholder="Suchen oder eigenen Namen..."
+                placeholder={newExType === 'cardio' ? 'z.B. Laufen, Radfahren...' : 'Suchen oder eigenen Namen...'}
                 placeholderTextColor={Colors.textMuted}
                 value={newExName}
                 onChangeText={searchExercises}
@@ -673,7 +755,7 @@ export default function WorkoutScreen() {
             <View style={styles.modalBtns}>
               <TouchableOpacity
                 style={[styles.modalBtn, styles.modalBtnCancel]}
-                onPress={() => { setShowAddEx(false); setNewExName(''); setSuggestions([]); }}
+                onPress={() => { setShowAddEx(false); setNewExName(''); setNewExType('strength'); setSuggestions([]); }}
               >
                 <Text style={styles.modalBtnCancelText}>Abbrechen</Text>
               </TouchableOpacity>
@@ -754,6 +836,21 @@ function createStyles(Colors: ColorScheme) {
     padding: 14, alignItems: 'center', marginTop: 8,
   },
   templateBtnText: { color: Colors.textMuted, fontSize: 14 },
+  finishBtn: {
+    backgroundColor: Colors.success + '22', borderWidth: 1, borderColor: Colors.success,
+    borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8,
+  },
+  finishBtnText: { color: Colors.success, fontSize: 15, fontWeight: '600' },
+  cardioIcon: { fontSize: 14 },
+  cardioInput: {
+    backgroundColor: Colors.surfaceAlt, borderRadius: 10, padding: 12,
+    color: Colors.text, fontSize: 14, minHeight: 70, textAlignVertical: 'top',
+  },
+  typeToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  typeToggleBtn: { flex: 1, backgroundColor: Colors.surfaceAlt, borderRadius: 10, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  typeToggleBtnActive: { backgroundColor: Colors.accent + '22', borderColor: Colors.accent },
+  typeToggleText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '500' },
+  typeToggleTextActive: { color: Colors.accent, fontWeight: '700' },
   addExBtn: {
     borderWidth: 1, borderColor: Colors.accent, borderRadius: 12, borderStyle: 'dashed',
     padding: 14, alignItems: 'center', marginTop: 8,
